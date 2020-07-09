@@ -37,10 +37,11 @@ def load_hparams():
         mel_fmax=8000.0,
 
         ################################
-        # Model Parameters             #
+        # Embedding Parameters             #
         ################################
         n_symbols=len(symbols),
         symbols_embedding_dim=512,
+
 
         # Decoder parameters
         n_frames_per_step=1,  # currently only 1 is supported

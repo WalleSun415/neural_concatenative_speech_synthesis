@@ -6,10 +6,11 @@ from stft import STFT
 from unidecode import unidecode
 import re
 from hparams import symbols
+import torchaudio
 from librosa.filters import mel as librosa_mel_fn
 from audio_processing import dynamic_range_compression
 from audio_processing import dynamic_range_decompression
-
+import python_speech_features
 
 # Mappings from symbol to numeric ID and vice versa:
 _symbol_to_id = {s: i for i, s in enumerate(symbols)}
@@ -39,30 +40,17 @@ def load_wav_to_torch(full_path):
     return torch.FloatTensor(data.astype(np.float32)), sampling_rate
 
 
-# def generate_mel_spectrogram():
-#     """Computes mel-spectrograms from a batch of waves
-#     PARAMS
-#     ------
-#     y: Variable(torch.FloatTensor) with shape (B, T) in range [-1, 1]
-#
-#     RETURNS
-#     -------
-#     mel_output: torch.FloatTensor of shape (B, n_mel_channels, T)
-#     """
-#     assert (torch.min(y.data) >= -1)
-#     assert (torch.max(y.data) <= 1)
-#     magnitudes, phases = self.stft_fn.transform(y)
-#     magnitudes = magnitudes.data
-#     mel_output = torch.matmul(self.mel_basis, magnitudes)
-#     mel_output = self.spectral_normalize(mel_output)
-#     return mel_output
-
-
 class TextMelLoader(torch.utils.data.Dataset):
     def __init__(self, audiopaths_and_text, hparams):
         self.audiopaths_and_text = load_filepaths_and_text(audiopaths_and_text)
         self.max_wav_value = hparams.max_wav_value
         self.sampling_rate = hparams.sampling_rate
+        self.filter_length = hparams.filter_length
+        self.win_length = hparams.win_length
+        self.hop_length = hparams.hop_length
+        self.n_mel_channels = hparams.n_mel_channels
+        self.mel_fmin = hparams.mel_fmin
+        self.mel_fmax = hparams.mel_fmax
         self.stft = ConcateSTFT(
             hparams.filter_length, hparams.hop_length, hparams.win_length,
             hparams.n_mel_channels, hparams.sampling_rate, hparams.mel_fmin,
@@ -81,12 +69,34 @@ class TextMelLoader(torch.utils.data.Dataset):
         audio, sampling_rate = load_wav_to_torch(filename)
         if sampling_rate != self.stft.sampling_rate:
             raise ValueError("{} {} SR doesn't match target {} SR".format(
-                sampling_rate, self.stft.sampling_rate))
+                sampling_rate, self.sampling_rate))
         audio_norm = audio / self.max_wav_value
         audio_norm = audio_norm.unsqueeze(0)
         audio_norm = torch.autograd.Variable(audio_norm, requires_grad=False)
         melspec = self.stft.mel_spectrogram(audio_norm)
         melspec = torch.squeeze(melspec, 0)
+
+        audio1, sampling_rate1 = torchaudio.load(filename)
+        if sampling_rate1 != self.sampling_rate:
+            raise ValueError("{} {} SR doesn't match target {} SR".format(
+                sampling_rate1, self.sampling_rate))
+        # window = torch.hann_window(self.filter_length)
+        # specgram = torchaudio.transforms.Spectrogram(win_length=self.win_length, power=2,
+        #                                              hop_length=self.hop_length, n_fft=self.filter_length)(audio1)
+        # melspec1 = torchaudio.transforms.MelScale(n_mels=self.n_mel_channels, sample_rate=self.sampling_rate,
+        #                                           f_min=self.mel_fmin, f_max=self.mel_fmax,
+        #                                           n_stft=self.filter_length // 2 + 1)(specgram)
+        # melspec1 = torchaudio.transforms.MelSpectrogram(sample_rate=self.sampling_rate, win_length=self.win_length, hop_length=self.hop_length, )(audio1)
+        stft = torch.stft(audio1, hop_length=self.hop_length, n_fft=self.filter_length, win_length=self.win_length, window=torch.hann_window(self.win_length))
+        spectro_torch = stft.pow(2).sum(-1)
+        melspec1 = torchaudio.transforms.MelScale(n_mels=self.n_mel_channels, sample_rate=self.sampling_rate, f_min=self.mel_fmin,
+                                                  f_max=self.mel_fmax)(spectro_torch)
+        melspec1 = torch.squeeze(melspec1, 0)
+
+        melspec2 = torchaudio.transforms.MelSpectrogram(sample_rate=self.sampling_rate, n_fft=self.filter_length, win_length=self.win_length,
+                                                        hop_length=self.hop_length, f_min=self.mel_fmin, f_max=self.mel_fmax,
+                                                        n_mels=self.n_mel_channels)(audio1)
+        melspec2 = torch.squeeze(melspec2, 0)
         return melspec
 
     def get_text(self, text):
