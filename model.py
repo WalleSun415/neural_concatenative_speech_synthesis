@@ -130,6 +130,7 @@ class RecurrentDecoder(nn.Module):
                  num_layers=1, bidirectional=False, drop_prob=0):
         super(RecurrentDecoder, self).__init__()
         self.decoder_current_state = torch.zeros((hparams.batch_size, decoder_hidden_size), requires_grad=False)
+        self.decoder_current_state = to_gpu(self.decoder_current_state)
         self.rnn_dropout = hparams.rnn_dropout
         self.n_mel_channels = hparams.n_mel_channels
 
@@ -181,8 +182,9 @@ class RecurrentDecoder(nn.Module):
         :return:
         '''
         init_state = self.init_state(alignment_inputs).unsqueeze(0)
+        init_state = to_gpu(init_state).float()
         decoder_inputs = torch.cat((init_state, decoder_inputs), dim=0)
-        decoder_inputs = to_gpu(decoder_inputs).float()
+        
 
         mel_outputs, gate_outputs = [], []
         while len(mel_outputs) < decoder_inputs.size(0) - 1:

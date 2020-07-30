@@ -61,7 +61,8 @@ def load_hparams():
         ################################
         # Optimization Hyperparameters #
         ################################
-        batch_size=4,
+        batch_size=
+        2,
         learning_rate = 1e-3,
     )
 

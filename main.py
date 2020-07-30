@@ -46,7 +46,7 @@ def train(hparams):
             y_pred = model(x)
             loss = criterion(y_pred, y)
             optimizer.zero_grad()
-            loss.backward()
+            loss.backward(retain_graph=True)
             optimizer.step()
 
             # loss log and visualization
