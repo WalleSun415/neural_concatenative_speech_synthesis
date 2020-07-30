@@ -22,8 +22,8 @@ def load_hparams():
     ################################
         # Data Parameters             #
         ################################
-        training_files='filelists/ljs_audio_text_train_filelist.txt',
-        validation_files='filelists/ljs_audio_text_val_filelist.txt',
+        training_files='filelists/colab_audio_text_train_filelist.txt',
+        validation_files='filelists/colab_audio_text_val_filelist.txt',
 
         ################################
         # Audio Parameters             #
