@@ -10,6 +10,7 @@ _letters = 'abcdefghijklmnopqrstuvwxyz '
 symbols = list(_special) + list(_punctuation)
 letters = [_pad] + list(_letters)
 
+
 def load_hparams():
     hparams = tf.contrib.training.HParams(
         ################################
@@ -18,6 +19,7 @@ def load_hparams():
         epochs=500,
         seed=1234,
         glued_num=1,
+        model_save_path="NeuralConcate.pth",
 
     ################################
         # Data Parameters             #

@@ -5,7 +5,7 @@ from data_ulils import TextMelLoader, TextMelCollate
 from torch.utils.data import DataLoader
 from model import NeuralConcatenativeSpeechSynthesis
 from loss_function import NeuralConcatenativeLoss
-
+import matplotlib.pyplot as plt
 
 def prepare_dataloaders(hparams):
     # Get data, data loaders and collate function ready
@@ -39,21 +39,28 @@ def train(hparams):
     loss_list = []
     for epoch in range(hparams.epochs):
         print("Epoch: {}".format(epoch))
-        loss = 0
+        running_loss = 0.0
         for i, batch in enumerate(train_loader):
             # model.zero_grad()
             x, y = model.parse_batch(batch)
             y_pred = model(x)
             loss = criterion(y_pred, y)
-            if i%3 == 0:
-                print("epoch: ", epoch, ", iteration: ", i, ", loss: ", loss.item())
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            iteration += 1
 
+            # loss log and visualization
+            running_loss += loss.item()
+            if i%100 == 0:
+                print('[%d, %5d] loss: %.3f' %
+                      (epoch + 1, i + 1, running_loss / 2000))
+                loss_list.append(running_loss / 2000)
+                running_loss = 0.0
+                plt.plot(loss_list)
 
+    torch.save(obj=model.state_dict(), f=hparams.model_save_path)
 
+# model.load_state_dict(torch.load(hparams.model_save_path))
 
 if __name__ == "__main__":
     hparams = load_hparams()

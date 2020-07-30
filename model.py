@@ -182,6 +182,7 @@ class RecurrentDecoder(nn.Module):
         '''
         init_state = self.init_state(alignment_inputs).unsqueeze(0)
         decoder_inputs = torch.cat((init_state, decoder_inputs), dim=0)
+        decoder_inputs = to_gpu(decoder_inputs).float()
 
         mel_outputs, gate_outputs = [], []
         while len(mel_outputs) < decoder_inputs.size(0) - 1:
