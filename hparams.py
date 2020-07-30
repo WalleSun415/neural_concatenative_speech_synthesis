@@ -2,12 +2,13 @@ import tensorflow as tf
 
 
 _pad = '_'
-_punctuation = '!\'(),.:;? '
+_punctuation = '!\'(),.:;?'
 _special = '-'
-_letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+_letters = 'abcdefghijklmnopqrstuvwxyz '
 
 # Export all symbols:
-symbols = [_pad] + list(_special) + list(_punctuation) + list(_letters)
+symbols = list(_special) + list(_punctuation)
+letters = [_pad] + list(_letters)
 
 def load_hparams():
     hparams = tf.contrib.training.HParams(
@@ -16,9 +17,9 @@ def load_hparams():
         ################################
         epochs=500,
         seed=1234,
+        glued_num=1,
 
-
-        ################################
+    ################################
         # Data Parameters             #
         ################################
         training_files='filelists/ljs_audio_text_train_filelist.txt',
@@ -37,19 +38,29 @@ def load_hparams():
         mel_fmax=8000.0,
 
         ################################
-        # Embedding Parameters             #
+        # Model Parameters             #
         ################################
-        n_symbols=len(symbols),
+        n_symbols=len(letters),
         symbols_embedding_dim=512,
 
+        # Audio Encoder Parameters
+        encoder_rnn_dim=1024,
+        prenet_dim=256,
+        audio_kernel_size=11, # audio
+        audio_stride=11,
+        decoder_kernel_size=5,  # text
+        text_stride=5,
+        # Text Decoder parameters
+        decoder_rnn_dim=512,
 
-        # Decoder parameters
-        n_frames_per_step=1,  # currently only 1 is supported
-
+        # Mel Decoder parameters
+        mel_decoder_rnn_dim=1024,
+        rnn_dropout=0.1,
         ################################
         # Optimization Hyperparameters #
         ################################
-        batch_size=4
+        batch_size=4,
+        learning_rate = 1e-3,
     )
 
     return hparams
