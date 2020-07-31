@@ -66,15 +66,18 @@ class Attention(nn.Module):
         super(Attention, self).__init__()
         self.model = LinearNorm(dec_hidden_size, enc_hidden_size, bias=False)
 
-    def forward(self, encoder_inputs, encoder_states, decoder_state):
+    def forward(self, encoder_inputs, encoder_states, decoder_states):
         # seq_len, batch, hidden_size
-        encoder_states = encoder_states.permute(1, 0, 2)
+        encoder_seq_len = encoder_states.size(0)
+        decoder_seq_len = decoder_states.size(0)
         # seq_len, batch, hidden_size
-        encoder_inputs = encoder_inputs.permute(1, 0, 2)
-        e = self.model(decoder_state).unsqueeze(dim=-1)
-        e = torch.matmul(encoder_states, e)  # batch * seq_len * 1
-        weights = F.softmax(e, dim=1)  # batch * seq_len * 1
-        return (encoder_inputs * weights).sum(dim=1)
+        # encoder_inputs = encoder_inputs.permute(1, 0, 2)
+        decoder_states = self.model(decoder_states).unsqueeze(dim=1).expand(-1, encoder_seq_len, -1, -1)
+        encoder_states = encoder_states.expand(decoder_seq_len, -1, -1, -1)
+        decoder_states = encoder_states * decoder_states
+        encoder_inputs = encoder_inputs.expand(decoder_seq_len, -1, -1, -1).permute(0, 2, 1, 3)
+        weights = F.softmax(decoder_states, dim=1).permute(0, 2, 3, 1)  # batch * seq_len * 1
+        return torch.matmul(weights, encoder_inputs).sum(dim=2)
 
 
 class AttentionDecoder(nn.Module):
@@ -98,12 +101,13 @@ class AttentionDecoder(nn.Module):
 
         # sequence of hidden state
         decoder_hidden_states, _ = self.rnn(decoder_inputs)
-        alignments = []
+
         # alignment for current hidden state
-        for state in decoder_hidden_states:
-            attention_distribution = self.attention(encoder_inputs, enc_hidden_states, state)
-            alignments += [attention_distribution]
-        return decoder_hidden_states, torch.stack(alignments)
+        # for state in decoder_hidden_states:
+        #     attention_distribution = self.attention(encoder_inputs, enc_hidden_states, state)
+        #     alignments += [attention_distribution]
+        attention_distribution = self.attention(encoder_inputs, enc_hidden_states, decoder_hidden_states)
+        return decoder_hidden_states, attention_distribution
 
 
 class AudioEncoder(nn.Module):

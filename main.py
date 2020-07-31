@@ -25,6 +25,7 @@ def train(hparams):
     torch.cuda.manual_seed(hparams.seed)
 
     model = NeuralConcatenativeSpeechSynthesis(hparams)
+    print(model)
     print("parameter numbers: ", sum(p.numel() for p in model.parameters() if p.requires_grad))
     learning_rate = hparams.learning_rate
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -41,22 +42,28 @@ def train(hparams):
         print("Epoch: {}".format(epoch))
         running_loss = 0.0
         for i, batch in enumerate(train_loader):
-            # model.zero_grad()
-            x, y = model.parse_batch(batch)
-            y_pred = model(x)
-            loss = criterion(y_pred, y)
-            optimizer.zero_grad()
-            loss.backward(retain_graph=True)
-            optimizer.step()
+            with torch.autograd.set_detect_anomaly(True):
+                # model.zero_grad()
+                x, y = model.parse_batch(batch)
+                y_pred = model(x)
+                loss = criterion(y_pred, y)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-            # loss log and visualization
-            running_loss += loss.item()
-            if i%100 == 0:
-                print('[%d, %5d] loss: %.3f' %
-                      (epoch + 1, i + 1, running_loss / 2000))
-                loss_list.append(running_loss / 2000)
+                # # loss log and visualization
+                # running_loss += loss.item()
+                # if i%100 == 0:
+                #     print('[%d, %d] loss: %.3f' %
+                #           (epoch, i, running_loss / 2000))
+                #     loss_list.append(running_loss / 2000)
+                #     running_loss = 0.0
+                #     plt.plot(loss_list)
+
+                running_loss = loss.item()
+                print('[%d, %d] loss: %.3f' %(epoch, i, running_loss))
+                loss_list.append(running_loss)
                 running_loss = 0.0
-                plt.plot(loss_list)
 
     torch.save(obj=model.state_dict(), f=hparams.model_save_path)
 
