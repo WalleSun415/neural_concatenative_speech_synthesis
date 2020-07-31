@@ -77,6 +77,21 @@ class Attention(nn.Module):
         return (encoder_inputs * weights).sum(dim=1)
 
 
+class AttentionNorm(nn.Module):
+    def __init__(self, enc_hidden_size, dec_hidden_size):
+        super(AttentionNorm, self).__init__()
+        self.model = LinearNorm(dec_hidden_size, enc_hidden_size, bias=False)
+
+    def forward(self, encoder_inputs, encoder_states, decoder_state):
+        # seq_len, batch, hidden_size
+        encoder_states = encoder_states.permute(1, 0, 2)
+        # seq_len, batch, hidden_size
+        encoder_inputs = encoder_inputs.permute(1, 0, 2)
+        e = self.model(decoder_state).unsqueeze(dim=-1)
+        e = torch.matmul(encoder_states, e)  # batch * seq_len * 1
+        weights = F.softmax(e, dim=1)  # batch * seq_len * 1
+        return (encoder_inputs * weights).sum(dim=1)
+
 class AttentionDecoder(nn.Module):
     def __init__(self, embedd_size, decoder_hidden_size, encoder_hidden_size,
                  num_layers=1, bidirectional=False, drop_prob=0):
@@ -134,7 +149,7 @@ class RecurrentDecoder(nn.Module):
         self.rnn_dropout = hparams.rnn_dropout
         self.n_mel_channels = hparams.n_mel_channels
 
-        self.attention = Attention(audio_encoder_size, decoder_hidden_size)
+        self.attention = AttentionNorm(audio_encoder_size, decoder_hidden_size)
         self.rnn = nn.GRUCell(input_size+audio_encoder_size, decoder_hidden_size, bias=False)
         self.spectral_linear_projection = LinearNorm(decoder_hidden_size+audio_encoder_size, spectral_size)
         self.gate_linear_projection = LinearNorm(decoder_hidden_size+audio_encoder_size, 1, bias=True, w_init_gain='sigmoid')
