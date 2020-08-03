@@ -24,8 +24,8 @@ def load_hparams():
     ################################
         # Data Parameters             #
         ################################
-        training_files='filelists/colab_audio_text_train_filelist.txt',
-        validation_files='filelists/colab_audio_text_val_filelist.txt',
+        training_files='filelists/ljs_audio_text_train_filelist.txt',
+        validation_files='filelists/ljs_audio_text_val_filelist.txt',
 
         ################################
         # Audio Parameters             #
@@ -43,27 +43,26 @@ def load_hparams():
         # Model Parameters             #
         ################################
         n_symbols=len(letters),
-        symbols_embedding_dim=512,
+        symbols_embedding_dim=64,
 
         # Audio Encoder Parameters
-        encoder_rnn_dim=1024,
-        prenet_dim=256,
-        audio_kernel_size=11, # audio
-        audio_stride=11,
+        encoder_rnn_dim=128,
+        prenet_dim=128,
+        audio_kernel_size=15, # audio
+        audio_stride=15,
         decoder_kernel_size=5,  # text
         text_stride=5,
         # Text Decoder parameters
-        decoder_rnn_dim=512,
+        decoder_rnn_dim=64,
 
         # Mel Decoder parameters
-        mel_decoder_rnn_dim=1024,
+        mel_decoder_rnn_dim=128,
         rnn_dropout=0.1,
         ################################
         # Optimization Hyperparameters #
         ################################
-        batch_size=
-        2,
-        learning_rate = 1e-3,
+        batch_size=1,
+        learning_rate=1e-3,
     )
 
     return hparams
