@@ -135,8 +135,8 @@ class RecurrentDecoder(nn.Module):
     def __init__(self, input_size, decoder_hidden_size, audio_encoder_size, spectral_size, hparams,
                  num_layers=1, bidirectional=False, drop_prob=0):
         super(RecurrentDecoder, self).__init__()
-        self.decoder_current_state = torch.zeros((hparams.batch_size, decoder_hidden_size), requires_grad=False)
-        self.decoder_current_state = to_gpu(self.decoder_current_state)
+        self.batch_size = hparams.batch_size
+        self.decoder_hidden_size = decoder_hidden_size
         self.rnn_dropout = hparams.rnn_dropout
         self.n_mel_channels = hparams.n_mel_channels
 
@@ -150,7 +150,7 @@ class RecurrentDecoder(nn.Module):
         input_and_context = torch.cat((decoder_input, attention_context), dim=-1)
         self.decoder_current_state = self.rnn(input_and_context, self.decoder_current_state)
         del input_and_context
-        self.decoder_current_state = F.relu(F.dropout(self.decoder_current_state, self.rnn_dropout, self.training))
+        # self.decoder_current_state = F.relu(F.dropout(self.decoder_current_state, self.rnn_dropout, self.training))
         decoder_hidden_attention_context = torch.cat((attention_context, self.decoder_current_state), dim=-1)
         del attention_context
         mel_output = self.spectral_linear_projection(decoder_hidden_attention_context)
@@ -189,6 +189,8 @@ class RecurrentDecoder(nn.Module):
         :param alignment_inputs: "glued" mel spectral features
         :return:
         '''
+        self.decoder_current_state = torch.zeros((self.batch_size, self.decoder_hidden_size), requires_grad=True)
+        self.decoder_current_state = to_gpu(self.decoder_current_state)
         init_state = self.init_state(alignment_inputs).unsqueeze(0)
         init_state = to_gpu(init_state).float()
         decoder_inputs = torch.cat((init_state, decoder_inputs), dim=0)
@@ -257,7 +259,7 @@ class NeuralConcatenativeSpeechSynthesis(nn.Module):
             mask = mask.permute(1, 0, 2)
 
             outputs[0].data.masked_fill_(mask, 0.0)
-            outputs[1].data.masked_fill_(mask[:, 0, :], 10)  # gate energies
+            outputs[1].data.masked_fill_(mask[:, 0, :], 1000)  # gate energies
 
         return outputs
 

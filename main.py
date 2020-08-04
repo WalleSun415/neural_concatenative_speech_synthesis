@@ -6,6 +6,15 @@ from torch.utils.data import DataLoader
 from model import NeuralConcatenativeSpeechSynthesis
 from loss_function import NeuralConcatenativeLoss
 import matplotlib.pyplot as plt
+import time
+import math
+
+
+def time_since(since):
+    s = time.time()-since
+    m = math.floor(s / 60)
+    s -= m*60
+    return m, s
 
 def prepare_dataloaders(hparams):
     # Get data, data loaders and collate function ready
@@ -13,7 +22,7 @@ def prepare_dataloaders(hparams):
     valset = TextMelLoader(hparams.validation_files, hparams)
     collate_fn = TextMelCollate()
 
-    train_loader = DataLoader(trainset, num_workers=0, shuffle=True,
+    train_loader = DataLoader(trainset, num_workers=2, shuffle=True,
                               sampler=None,
                               batch_size=hparams.batch_size, pin_memory=False,
                               drop_last=True, collate_fn=collate_fn)
@@ -38,10 +47,13 @@ def train(hparams):
 
     iteration = 0
     loss_list = []
+    end = time.time()
     for epoch in range(hparams.epochs):
         print("Epoch: {}".format(epoch))
         running_loss = 0.0
         for i, batch in enumerate(train_loader):
+            print("data preprocess: %dm, %ds" % time_since(end))
+            start = time.time()
             with torch.autograd.set_detect_anomaly(True):
                 # model.zero_grad()
                 x, y = model.parse_batch(batch)
@@ -64,6 +76,10 @@ def train(hparams):
                 print('[%d, %d] loss: %.3f' %(epoch, i, running_loss))
                 loss_list.append(running_loss)
                 running_loss = 0.0
+            end = time.time()
+            print("data training: %dm, %ds" % time_since(start))
+            del loss
+            del y_pred
 
     torch.save(obj=model.state_dict(), f=hparams.model_save_path)
 

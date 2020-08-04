@@ -24,8 +24,8 @@ def load_hparams():
     ################################
         # Data Parameters             #
         ################################
-        training_files='filelists/ljs_audio_text_train_filelist.txt',
-        validation_files='filelists/ljs_audio_text_val_filelist.txt',
+        training_files='filelists/colab_audio_text_train_filelist.txt',
+        validation_files='filelists/colab_audio_text_val_filelist.txt',
 
         ################################
         # Audio Parameters             #
@@ -61,7 +61,7 @@ def load_hparams():
         ################################
         # Optimization Hyperparameters #
         ################################
-        batch_size=1,
+        batch_size=8,
         learning_rate=1e-3,
     )
 
