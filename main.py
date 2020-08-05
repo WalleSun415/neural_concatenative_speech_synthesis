@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import time
 import math
 from tensorboardX import SummaryWriter
+from prefetch_generator import BackgroundGenerator
 
 
 def time_since(since):
@@ -50,7 +51,7 @@ def train(hparams):
     writer = SummaryWriter('runs/exp-1')
     for epoch in range(hparams.epochs):
         print("Epoch: {}".format(epoch))
-        for i, batch in enumerate(train_loader):
+        for i, batch in enumerate(BackgroundGenerator(train_loader)):
             x, y = model.parse_batch(batch)
             y_pred = model(x)
             loss, mel_loss, gate_loss = criterion(y_pred, y)
