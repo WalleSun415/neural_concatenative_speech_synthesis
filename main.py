@@ -1,4 +1,3 @@
-import time
 import torch
 from hparams import load_hparams
 from data_ulils import TextMelLoader, TextMelCollate
@@ -8,6 +7,7 @@ from loss_function import NeuralConcatenativeLoss
 import matplotlib.pyplot as plt
 import time
 import math
+from tensorboardX import SummaryWriter
 
 
 def time_since(since):
@@ -15,6 +15,7 @@ def time_since(since):
     m = math.floor(s / 60)
     s -= m*60
     return m, s
+
 
 def prepare_dataloaders(hparams):
     # Get data, data loaders and collate function ready
@@ -45,45 +46,33 @@ def train(hparams):
     model.to(device)
     train_loader, valset, collate_fn = prepare_dataloaders(hparams)
 
-    iteration = 0
-    loss_list = []
-    end = time.time()
+    running_loss = 0.0
+    writer = SummaryWriter('runs/exp-1')
     for epoch in range(hparams.epochs):
         print("Epoch: {}".format(epoch))
-        running_loss = 0.0
         for i, batch in enumerate(train_loader):
-            print("data preprocess: %dm, %ds" % time_since(end))
-            start = time.time()
-            with torch.autograd.set_detect_anomaly(True):
-                # model.zero_grad()
-                x, y = model.parse_batch(batch)
-                y_pred = model(x)
-                loss = criterion(y_pred, y)
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+            x, y = model.parse_batch(batch)
+            y_pred = model(x)
+            loss, mel_loss, gate_loss = criterion(y_pred, y)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
-                # # loss log and visualization
-                # running_loss += loss.item()
-                # if i%100 == 0:
-                #     print('[%d, %d] loss: %.3f' %
-                #           (epoch, i, running_loss / 2000))
-                #     loss_list.append(running_loss / 2000)
-                #     running_loss = 0.0
-                #     plt.plot(loss_list)
-
-                running_loss = loss.item()
-                print('[%d, %d] loss: %.3f' %(epoch, i, running_loss))
-                loss_list.append(running_loss)
+            # loss log and visualization
+            running_loss += loss.item()
+            if i%10 == 0:
+                print('[%d, %d] loss: %.3f' % (epoch, i, running_loss / 10))
                 running_loss = 0.0
-            end = time.time()
-            print("data training: %dm, %ds" % time_since(start))
+            writer.add_scalar("training_loss", loss.item())
+            writer.add_scalar("mel_loss", mel_loss)
+            writer.add_scalar("gate_loss", gate_loss)
             del loss
             del y_pred
 
     torch.save(obj=model.state_dict(), f=hparams.model_save_path)
 
 # model.load_state_dict(torch.load(hparams.model_save_path))
+
 
 if __name__ == "__main__":
     hparams = load_hparams()

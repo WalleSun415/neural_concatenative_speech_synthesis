@@ -15,4 +15,4 @@ class NeuralConcatenativeLoss(nn.Module):
         gate_out = gate_out.view(-1, 1)
         mel_loss = nn.MSELoss()(mel_out, mel_target)
         gate_loss = nn.BCEWithLogitsLoss()(gate_out, gate_target)
-        return mel_loss + gate_loss
+        return mel_loss + gate_loss, mel_loss.item(), gate_loss.item()
