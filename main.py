@@ -9,6 +9,7 @@ import time
 import math
 from tensorboardX import SummaryWriter
 from prefetch_generator import BackgroundGenerator
+from data_ulils import get_mel_text_pair_inference
 
 
 def time_since(since):
@@ -31,8 +32,34 @@ def prepare_dataloaders(hparams):
     return train_loader, valset, collate_fn
 
 
+def validate(model, criterion, valset, batch_size, collate_fn):
+    writer = SummaryWriter('runs/exp-1')
+    """Handles all the validation scoring and printing"""
+    model.eval()
+    with torch.no_grad():
+        val_loader = DataLoader(valset, sampler=None, num_workers=2,
+                                shuffle=False, batch_size=batch_size,
+                                pin_memory=False, collate_fn=collate_fn)
+        val_loss = 0.0
+        total_mel_loss = 0.0
+        total_gate_loss = 0.0
+        for i, batch in enumerate(BackgroundGenerator(val_loader)):
+            x, y = model.parse_batch(batch)
+            y_pred = model(x)
+            loss, mel_loss, gate_loss = criterion(y_pred, y)
+            val_loss += loss.item()
+            total_mel_loss += mel_loss
+            total_gate_loss += gate_loss
+        val_loss = val_loss / (i + 1)
+        total_mel_loss = total_mel_loss / (i + 1)
+        total_gate_loss = total_gate_loss / (i + 1)
+        writer.add_scalar("val_loss", val_loss)
+        writer.add_scalar("val_mel_loss", total_mel_loss)
+        writer.add_scalar("val_gate_loss", total_gate_loss)
+    model.train()
+
+
 def train(hparams):
-    torch.manual_seed(hparams.seed)
     torch.cuda.manual_seed(hparams.seed)
 
     model = NeuralConcatenativeSpeechSynthesis(hparams)
@@ -64,17 +91,26 @@ def train(hparams):
             if i%10 == 0:
                 print('[%d, %d] loss: %.3f' % (epoch, i, running_loss / 10))
                 running_loss = 0.0
+                validate(model, criterion, valset, hparams.batch_size, collate_fn)
             writer.add_scalar("training_loss", loss.item())
             writer.add_scalar("mel_loss", mel_loss)
             writer.add_scalar("gate_loss", gate_loss)
             del loss
             del y_pred
-
     torch.save(obj=model.state_dict(), f=hparams.model_save_path)
-
-# model.load_state_dict(torch.load(hparams.model_save_path))
 
 
 if __name__ == "__main__":
     hparams = load_hparams()
+    torch.manual_seed(hparams.seed)
     train(hparams)
+    text = "I love neural network"
+    inputs = get_mel_text_pair_inference(text, hparams)
+    model = NeuralConcatenativeSpeechSynthesis(hparams)
+    if torch.cuda.is_available():
+        model.load_state_dict(torch.load('NeuralConcate.pth'))
+    else:
+        model.load_state_dict(torch.load('NeuralConcate.pth', map_location=torch.device('cpu')))
+    with torch.no_grad():
+        mel_outputs, gate_outputs = model.inference(inputs)
+    print(mel_outputs.shape, gate_outputs.shape)

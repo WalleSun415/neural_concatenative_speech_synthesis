@@ -29,11 +29,14 @@ def text_to_sequence(audiopath, text, word_to_audio, audio_to_sentences, glued_n
             audio_set = random.sample(word_to_audio[word], glued_num)
         else:
             audio_set = word_to_audio[word]
+        # print(word, word_to_audio[word])
         audio_list += audio_set
     # avoid repeated audio
     audio_list = list(set(audio_list))
     # avoid target audio
-    audio_list = list(filter(lambda a: a != audiopath, audio_list))
+    if len(audio_list) >1:
+        audio_list = list(filter(lambda a: a != audiopath, audio_list))
+    # print(audio_list)
     for path in audio_list:
         for s in audio_to_sentences[path]:
             if s in _symbol_to_id:
@@ -101,14 +104,13 @@ class TextMelLoader(torch.utils.data.Dataset):
         text = re.sub(_whitespace_re, ' ', text)
 
         text, glued_text, audio_list = self.get_text(audiopath, text)
-        assert audiopath not in audio_list, ("ERROR: audio: {} occurs in glued audio list!".format(audiopath))
         mel = self.get_mel(audiopath)
         glued_mel = []
+        # print(audio_list)
         for audio in audio_list:
             glued_mel += [self.get_mel(audio)]
         glued_mel = torch.cat(glued_mel, -1)
         return (text, glued_text, mel, glued_mel)
-
 
     def get_mel(self, filename):
         # produce target mel spectral features
@@ -227,6 +229,38 @@ class TextMelCollate():
 
         return text_padded, input_lengths, mel_padded, gate_padded, output_lengths, \
                glued_text_padded, glued_mel_padded
+
+
+def get_mel(filename, hparams):
+        audio, sampling_rate = librosa.core.load(filename)
+        if sampling_rate != hparams.sampling_rate:
+            raise ValueError("{} {} SR doesn't match target {} SR".format(
+                sampling_rate, hparams.sampling_rate))
+        melspec = librosa.feature.melspectrogram(y=audio, sr=sampling_rate,
+                                                 n_fft=hparams.filter_length, hop_length=hparams.hop_length, power=1,
+                                                 n_mels=hparams.n_mel_channels, fmin=hparams.mel_fmin, fmax=hparams.mel_fmax)
+        melspec_features = dynamic_range_compression(torch.FloatTensor(melspec.astype(np.float32)))
+        return melspec_features
+
+
+def get_mel_text_pair_inference(text, hparams):
+    audiopaths_and_text = load_filepaths_and_text(hparams.training_files)
+    word_to_audio, audio_to_sentences = produce_inverted_index(audiopaths_and_text)
+    # preprocess sentence
+    text = text.lower()
+    text = re.sub(_symbols, ' ', text)
+    text = re.sub(_whitespace_re, ' ', text)
+
+    text_norm, glued_text_norm, audio_list = \
+        text_to_sequence(audiopaths_and_text, text, word_to_audio, audio_to_sentences, hparams.glued_num)
+    text_norm = torch.IntTensor(text_norm)
+    glued_text_norm = torch.IntTensor(glued_text_norm)
+
+    glued_mel = []
+    for audio in audio_list:
+        glued_mel += [get_mel(audio, hparams)]
+    glued_mel = torch.cat(glued_mel, -1)
+    return (text_norm.unsqueeze(0), glued_text_norm.unsqueeze(0), glued_mel.unsqueeze(0))
 
 
 if __name__ == "__main__":
