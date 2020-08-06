@@ -3,7 +3,6 @@ from librosa.filters import mel as librosa_mel_fn
 from utils import dynamic_range_compression
 from utils import dynamic_range_decompression
 from utils import to_gpu
-from stft import STFT
 
 class LinearNorm(torch.nn.Module):
     def __init__(self, in_dim, out_dim, bias=True, w_init_gain='linear'):
