@@ -5,7 +5,6 @@ import re
 from hparams import letters
 import librosa
 from utils import dynamic_range_compression, dynamic_range_decompression
-from utils import load_wav_to_torch
 import layers
 
 # Mappings from symbol to numeric ID and vice versa:
@@ -87,10 +86,7 @@ class TextMelLoader(torch.utils.data.Dataset):
         self.mel_fmax = hparams.mel_fmax
         self.word_to_audio, self.audio_to_sentences = produce_inverted_index(self.audiopaths_and_text)
         self.glued_num = hparams.glued_num
-        self.stft = layers.TacotronSTFT(
-            hparams.filter_length, hparams.hop_length, hparams.win_length,
-            hparams.n_mel_channels, hparams.sampling_rate, hparams.mel_fmin,
-            hparams.mel_fmax)
+
 
         random.seed(hparams.seed)
         random.shuffle(self.audiopaths_and_text)
@@ -114,21 +110,21 @@ class TextMelLoader(torch.utils.data.Dataset):
 
     def get_mel(self, filename):
         # produce target mel spectral features
-        audio, sampling_rate = load_wav_to_torch(filename)
+        audio, sampling_rate = librosa.core.load(filename)
         if sampling_rate != self.sampling_rate:
             raise ValueError("{} {} SR doesn't match target {} SR".format(
                 sampling_rate, self.sampling_rate))
-        # melspec = librosa.feature.melspectrogram(y=audio, sr=sampling_rate,
-        #                                          n_fft=self.filter_length, hop_length=self.hop_length, power=1,
-        #                                          n_mels=self.n_mel_channels, fmin=self.mel_fmin, fmax=self.mel_fmax)
-        # melspec_features = dynamic_range_compression(torch.FloatTensor(melspec.astype(np.float32)))
-        audio_norm = audio / self.max_wav_value
-        audio_norm = audio_norm.unsqueeze(0)
-        audio_norm = torch.autograd.Variable(audio_norm, requires_grad=False)
-        melspec = self.stft.mel_spectrogram(audio_norm)
-        melspec = torch.squeeze(melspec, 0)
+        melspec = librosa.feature.melspectrogram(y=audio, sr=sampling_rate,
+                                                 n_fft=self.filter_length, hop_length=self.hop_length, power=1,
+                                                 n_mels=self.n_mel_channels, fmin=self.mel_fmin, fmax=self.mel_fmax)
+        melspec_features = dynamic_range_compression(torch.FloatTensor(melspec.astype(np.float32)))
+        # audio_norm = audio / self.max_wav_value
+        # audio_norm = audio_norm.unsqueeze(0)
+        # audio_norm = torch.autograd.Variable(audio_norm, requires_grad=False)
+        # melspec = self.stft.mel_spectrogram(audio_norm)
+        # melspec = torch.squeeze(melspec, 0)
 
-        return melspec
+        return melspec_features
 
     def get_text(self, audiopath, text):
         text_norm, glued_text_norm, audio_list = \
