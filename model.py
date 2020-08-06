@@ -183,7 +183,8 @@ class RecurrentDecoder(nn.Module):
         :param alignment_inputs: "glued" mel spectral features
         :return:
         '''
-        self.decoder_current_state = torch.zeros((self.batch_size, self.decoder_hidden_size), requires_grad=True)
+        batch_size = decoder_inputs.size(1)
+        self.decoder_current_state = torch.zeros((batch_size, self.decoder_hidden_size), requires_grad=True)
         self.decoder_current_state = to_gpu(self.decoder_current_state)
         init_state = self.init_state(alignment_inputs).unsqueeze(0)
         init_state = to_gpu(init_state).float()

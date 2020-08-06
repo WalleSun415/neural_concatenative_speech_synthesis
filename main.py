@@ -33,7 +33,6 @@ def prepare_dataloaders(hparams):
 
 
 def validate(model, criterion, valset, batch_size, collate_fn):
-    writer = SummaryWriter('runs/exp-1')
     """Handles all the validation scoring and printing"""
     model.eval()
     with torch.no_grad():
@@ -53,10 +52,8 @@ def validate(model, criterion, valset, batch_size, collate_fn):
         val_loss = val_loss / (i + 1)
         total_mel_loss = total_mel_loss / (i + 1)
         total_gate_loss = total_gate_loss / (i + 1)
-        writer.add_scalar("val_loss", val_loss)
-        writer.add_scalar("val_mel_loss", total_mel_loss)
-        writer.add_scalar("val_gate_loss", total_gate_loss)
     model.train()
+    return val_loss, total_mel_loss, total_gate_loss
 
 
 def train(hparams):
@@ -75,7 +72,7 @@ def train(hparams):
     train_loader, valset, collate_fn = prepare_dataloaders(hparams)
 
     running_loss = 0.0
-    writer = SummaryWriter('runs/exp-1')
+    writer = SummaryWriter('runs/exp-2')
     for epoch in range(hparams.epochs):
         print("Epoch: {}".format(epoch))
         for i, batch in enumerate(BackgroundGenerator(train_loader)):
@@ -91,10 +88,13 @@ def train(hparams):
             if i%10 == 0:
                 print('[%d, %d] loss: %.3f' % (epoch, i, running_loss / 10))
                 running_loss = 0.0
-                validate(model, criterion, valset, hparams.batch_size, collate_fn)
-            writer.add_scalar("training_loss", loss.item())
-            writer.add_scalar("mel_loss", mel_loss)
-            writer.add_scalar("gate_loss", gate_loss)
+                val_loss, total_mel_loss, total_gate_loss = validate(model, criterion, valset, hparams.batch_size, collate_fn)
+                writer.add_scalar("val_loss", val_loss)
+                writer.add_scalar("val_mel_loss", total_mel_loss)
+                writer.add_scalar("val_gate_loss", total_gate_loss)
+            writer.add_scalar("training_loss", loss.item(), i)
+            writer.add_scalar("mel_loss", mel_loss, i)
+            writer.add_scalar("gate_loss", gate_loss, i)
             del loss
             del y_pred
     torch.save(obj=model.state_dict(), f=hparams.model_save_path)
