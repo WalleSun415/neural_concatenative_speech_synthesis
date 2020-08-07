@@ -10,6 +10,10 @@ import math
 from tensorboardX import SummaryWriter
 from prefetch_generator import BackgroundGenerator
 from data_ulils import get_mel_text_pair_inference
+import librosa
+import librosa.display
+import numpy as np
+from utils import dynamic_range_compression, dynamic_range_decompression
 
 
 def time_since(since):
@@ -103,8 +107,8 @@ def train(hparams):
 if __name__ == "__main__":
     hparams = load_hparams()
     torch.manual_seed(hparams.seed)
-    train(hparams)
-    text = "I love neural network"
+    # train(hparams)
+    text = "It is an easy document to understand when you remember that it was called into being"
     inputs = get_mel_text_pair_inference(text, hparams)
     model = NeuralConcatenativeSpeechSynthesis(hparams)
     if torch.cuda.is_available():
@@ -114,3 +118,23 @@ if __name__ == "__main__":
     with torch.no_grad():
         mel_outputs, gate_outputs = model.inference(inputs)
     print(mel_outputs.shape, gate_outputs.shape)
+
+
+    y, sample_rate = librosa.core.load("/Users/swl/Dissertation/LJSpeech-1.1/wavs/LJ023-0056.wav", sr=22050)
+    melspectrogram = librosa.feature.melspectrogram(y=y, sr=22050, n_fft=1024, hop_length=256, power=1,
+                                                    n_mels=hparams.n_mel_channels, fmin=hparams.mel_fmin, fmax=hparams.mel_fmax)
+    print(melspectrogram.shape)
+    frame_num = melspectrogram.shape[1]
+    mel_outputs = mel_outputs.data.numpy()[:frame_num, :].T
+
+    plt.figure(figsize=(10, 4))
+    plt.subplot(2, 1, 1)
+    librosa.display.specshow(np.log(melspectrogram), y_axis='mel', x_axis='time',
+                             hop_length=hparams.hop_length, fmin=hparams.mel_fmin, fmax=hparams.mel_fmax)
+    plt.title('Original Mel spectrogram')
+    plt.subplot(2, 1, 2)
+    librosa.display.specshow(mel_outputs, y_axis='mel', x_axis='time',
+                             hop_length=hparams.hop_length, fmin=hparams.mel_fmin, fmax=hparams.mel_fmax)
+    plt.title('Generated Mel spectrogram')
+    plt.tight_layout()
+    plt.show()
