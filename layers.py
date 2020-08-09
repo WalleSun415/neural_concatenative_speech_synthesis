@@ -36,7 +36,6 @@ class ConvNorm(torch.nn.Module):
 
     def forward(self, signal):
         conv_signal = self.conv(signal)
-        # self.conv = to_gpu(self.conv)
         return conv_signal
 
 
