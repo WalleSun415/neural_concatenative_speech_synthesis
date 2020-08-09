@@ -40,6 +40,7 @@ def gen_plot(melspectrogram, mel_outputs, hparams):
     plt.title('Generated Mel spectrogram')
     plt.savefig(buf, format='jpeg')
     buf.seek(0)
+    plt.close()
     return buf
 
 
@@ -96,7 +97,7 @@ def train(hparams):
     train_loader, valset, collate_fn = prepare_dataloaders(hparams)
 
     running_loss = 0.0
-    writer = SummaryWriter('runs/exp-2')
+    writer = SummaryWriter('runs/exp-3')
     for epoch in range(hparams.epochs):
         print("Epoch: {}".format(epoch))
         for i, batch in enumerate(BackgroundGenerator(train_loader)):
@@ -113,19 +114,20 @@ def train(hparams):
                 print('[%d, %d] loss: %.3f' % (epoch, i, running_loss / 5))
                 running_loss = 0.0
                 val_loss, total_mel_loss, total_gate_loss = validate(model, criterion, valset, hparams.batch_size, collate_fn)
-                writer.add_scalar("val_loss", torch.log(val_loss), i)
-                writer.add_scalar("val_mel_loss", torch.log(total_mel_loss), i)
-                writer.add_scalar("val_gate_loss", torch.log(total_gate_loss), i)
-            plot_buf = gen_plot(batch[2].data.numpy()[0].T, y_pred[0].data.numpy()[0].T, hparams)
+                writer.add_scalar("val_loss", np.log10(val_loss), i)
+                writer.add_scalar("val_mel_loss", np.log10(total_mel_loss), i)
+                writer.add_scalar("val_gate_loss", np.log10(total_gate_loss), i)
+            plot_buf = gen_plot(batch[2].cpu().data.numpy()[0].T, y_pred[0].cpu().data.numpy()[0].T, hparams)
             image = PIL.Image.open(plot_buf)
             image = ToTensor()(image)
             writer.add_image('training mel spectrogram', image, i)
-            writer.add_scalar("training_loss", torch.log(loss.item()), i)
-            writer.add_scalar("mel_loss", torch.log(mel_loss), i)
-            writer.add_scalar("gate_loss", torch.log(gate_loss), i)
+            writer.add_scalar("training_loss", np.log10(loss.item()), i)
+            writer.add_scalar("mel_loss", np.log10(mel_loss), i)
+            writer.add_scalar("gate_loss", np.log10(gate_loss), i)
             del loss
             del y_pred
-    torch.save(obj=model.state_dict(), f=hparams.model_save_path)
+        torch.save(obj=model.state_dict(), f=hparams.model_save_path)
+        print("Save model!")
 
 
 def inference(hparams):

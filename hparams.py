@@ -16,7 +16,7 @@ def load_hparams():
         ################################
         # Experiment Parameters        #
         ################################
-        epochs=1,
+        epochs=10,
         seed=1234,
         glued_num=1,
         model_save_path="NeuralConcate.pth",
@@ -61,7 +61,7 @@ def load_hparams():
         ################################
         # Optimization Hyperparameters #
         ################################
-        batch_size=32,
+        batch_size=16,
         learning_rate=1e-3,
     )
 
