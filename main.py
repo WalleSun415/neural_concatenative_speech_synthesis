@@ -44,6 +44,22 @@ def gen_plot(melspectrogram, mel_outputs, hparams):
     return buf
 
 
+def gen_audio(melspectrogram, mel_outputs, hparams):
+    melspectrogram = dynamic_range_decompression(melspectrogram)
+    mel_outputs = dynamic_range_decompression(mel_outputs)
+    original_audio_signal = librosa.feature.inverse.mel_to_audio(melspectrogram.data.numpy(), sr=hparams.sampling_rate,
+                                                                 n_fft=hparams.filter_length,
+                                                                 hop_length=hparams.filter_length, power=1,
+                                                                 n_mels=hparams.n_mel_channels,
+                                                                 fmin=hparams.mel_fmin, fmax=hparams.mel_fmax)
+    gen_audio_signal = librosa.feature.inverse.mel_to_audio(mel_outputs.data.numpy(), sr=hparams.sampling_rate,
+                                                            n_fft=hparams.filter_length,
+                                                            hop_length=hparams.filter_length, power=1,
+                                                            n_mels=hparams.n_mel_channels, fmin=hparams.mel_fmin,
+                                                            fmax=hparams.mel_fmax)
+    return original_audio_signal, gen_audio_signal
+
+
 def prepare_dataloaders(hparams):
     # Get data, data loaders and collate function ready
     trainset = TextMelLoader(hparams.training_files, hparams)
@@ -117,10 +133,16 @@ def train(hparams):
                 writer.add_scalar("val_loss", np.log10(val_loss), i)
                 writer.add_scalar("val_mel_loss", np.log10(total_mel_loss), i)
                 writer.add_scalar("val_gate_loss", np.log10(total_gate_loss), i)
+
             plot_buf = gen_plot(batch[2].cpu().data.numpy()[0].T, y_pred[0].cpu().data.numpy()[0].T, hparams)
             image = PIL.Image.open(plot_buf)
             image = ToTensor()(image)
             writer.add_image('training mel spectrogram', image, i)
+
+            orig_audio, gener_audio = gen_audio(batch[2].cpu().data[0], y_pred[0].cpu().data[0], hparams)
+            writer.add_audio("original_audio", orig_audio, sample_rate=hparams.sampling_rate)
+            writer.add_audio("generated_audio", gener_audio, sample_rate=hparams.sampling_rate)
+
             writer.add_scalar("training_loss", np.log10(loss.item()), i)
             writer.add_scalar("mel_loss", np.log10(mel_loss), i)
             writer.add_scalar("gate_loss", np.log10(gate_loss), i)
