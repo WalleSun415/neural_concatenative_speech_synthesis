@@ -136,13 +136,13 @@ def train(hparams):
                 # writer.add_scalar("val_gate_loss", np.log10(total_gate_loss), epoch*iter_num+i)
 
                 # training mel spectrogram
-                plot_buf = gen_plot(x[2].cpu().data.numpy()[0].T, y_pred[0].cpu().data.numpy()[0].T, hparams)
+                plot_buf = gen_plot(x[2].cpu().data.numpy()[0], y_pred[0].cpu().data.numpy()[0], hparams)
                 image = PIL.Image.open(plot_buf)
                 image = ToTensor()(image)
                 writer.add_image('training mel spectrogram', image, epoch * iter_num + i)
 
                 # inference mel spectrogram
-                audio, sample_rate = librosa.core.load("/Users/swl/Dissertation/LJSpeech-1.1/wavs/LJ040-0209.wav", sr=22050)
+                audio, sample_rate = librosa.core.load("/home/swl/LJSpeech-1.1/wavs/LJ040-0209.wav", sr=22050)
                 original_mel, mel_predicted = inference(model, inputs, audio, hparams)
                 plot_buf = gen_plot(original_mel, mel_predicted, hparams)
                 image = PIL.Image.open(plot_buf)
