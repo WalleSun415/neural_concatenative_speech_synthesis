@@ -240,7 +240,7 @@ def get_mel(filename, hparams):
 
 
 def get_mel_text_pair_inference(text, hparams):
-    audiopaths_and_text = load_filepaths_and_text(hparams.training_files)
+    audiopaths_and_text = load_filepaths_and_text(hparams.training_files_base)
     word_to_audio, audio_to_sentences = produce_inverted_index(audiopaths_and_text)
     # preprocess sentence
     text = text.lower()

@@ -113,7 +113,7 @@ def train(hparams):
     train_loader, valset, collate_fn = prepare_dataloaders(hparams)
 
     running_loss = 0.0
-    writer = SummaryWriter('runs/exp-3')
+    writer = SummaryWriter(hparams.exp_path)
     iter_num = len(train_loader)
     text = "well I've got to live with her. I guess I love her, end quote."
     inputs = get_mel_text_pair_inference(text, hparams)
@@ -132,13 +132,13 @@ def train(hparams):
             if i%10 == 0:
                 print('[%d, %d] loss: %.3f' % (epoch, epoch*iter_num+i, running_loss / 10))
                 running_loss = 0.0
-                val_loss, total_mel_loss, total_gate_loss = validate(model, criterion, valset, hparams.batch_size, collate_fn)
-                writer.add_scalar("val_loss", np.log10(val_loss), epoch*iter_num+i)
-                writer.add_scalar("val_mel_loss", np.log10(total_mel_loss), epoch*iter_num+i)
-                writer.add_scalar("val_gate_loss", np.log10(total_gate_loss), epoch*iter_num+i)
+                # val_loss, total_mel_loss, total_gate_loss = validate(model, criterion, valset, hparams.batch_size, collate_fn)
+                # writer.add_scalar("val_loss", np.log10(val_loss), epoch*iter_num+i)
+                # writer.add_scalar("val_mel_loss", np.log10(total_mel_loss), epoch*iter_num+i)
+                # writer.add_scalar("val_gate_loss", np.log10(total_gate_loss), epoch*iter_num+i)
 
                 # training mel spectrogram
-                plot_buf = gen_plot(batch[2].cpu().data.numpy()[0].T, y_pred[0].cpu().data.numpy()[0].T, hparams)
+                plot_buf = gen_plot(batch[2].cpu().data.numpy()[0], y_pred[0].cpu().data.numpy()[0], hparams)
                 image = PIL.Image.open(plot_buf)
                 image = ToTensor()(image)
                 writer.add_image('training mel spectrogram', image, epoch * iter_num + i)
@@ -152,9 +152,9 @@ def train(hparams):
                 writer.add_image('inference mel spectrogram', image, epoch * iter_num + i)
 
                 # audio during training
-                orig_audio, gener_audio = gen_audio(batch[2].cpu().data[0], y_pred[0].cpu().data[0], hparams)
-                writer.add_audio("original_audio", orig_audio, sample_rate=hparams.sampling_rate)
-                writer.add_audio("generated_audio", gener_audio, sample_rate=hparams.sampling_rate)
+                #orig_audio, gener_audio = gen_audio(batch[2].cpu().data[0], y_pred[0].cpu().data[0], hparams)
+                #writer.add_audio("original_audio", orig_audio, sample_rate=hparams.sampling_rate)
+                #writer.add_audio("generated_audio", gener_audio, sample_rate=hparams.sampling_rate)
 
             # loss log and visualization
             running_loss += loss.item()
@@ -164,10 +164,11 @@ def train(hparams):
             del loss
             del y_pred
         torch.save(obj=model.state_dict(), f=hparams.model_save_path)
-        print("Save model!")
+        print("Epoch: %d; Save model!" % (epoch))
 
 
 def inference(model, inputs, original_audio, hparams):
+    model.eval()
     with torch.no_grad():
         mel_outputs, gate_outputs = model.inference(inputs)
     melspectrogram = librosa.feature.melspectrogram(y=original_audio, sr=22050, n_fft=1024, hop_length=256, power=1,
@@ -175,12 +176,13 @@ def inference(model, inputs, original_audio, hparams):
                                                     fmax=hparams.mel_fmax)
     frame_num = melspectrogram.shape[1]
     # mel_outputs = mel_outputs.data.numpy()[:frame_num, :].T
-    mel_outputs = mel_outputs.data.numpy().T
+    mel_outputs = mel_outputs.cpu().data.numpy().T
+    model.train()
     return np.log(melspectrogram), mel_outputs
 
 
 def inference_local(model, inputs, original_audio, hparams):
-
+    model.eval()
     with torch.no_grad():
         mel_outputs, gate_outputs = model.inference(inputs)
     melspectrogram = librosa.feature.melspectrogram(y=original_audio, sr=22050, n_fft=1024, hop_length=256, power=1,
