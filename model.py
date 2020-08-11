@@ -146,7 +146,7 @@ class RecurrentDecoder(nn.Module):
         self.gate_linear_projection = LinearNorm(decoder_hidden_size+audio_encoder_size, 1, bias=True, w_init_gain='sigmoid')
 
     def decode(self, decoder_input):
-        attention_context = self.attention(self.alignment_inputs, self.alignment_inputs, self.decoder_current_state)
+        attention_context = self.attention(self.alignment_inputs, self.alignment_inputs, decoder_input)
         input_and_context = torch.cat((decoder_input, attention_context), dim=-1)
         self.decoder_current_state = self.rnn(input_and_context, self.decoder_current_state)
         del input_and_context
