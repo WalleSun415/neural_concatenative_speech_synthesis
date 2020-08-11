@@ -3,9 +3,13 @@ import random
 import numpy as np
 import re
 from hparams import letters
-import librosa
+import librosa.display
 from utils import dynamic_range_compression, dynamic_range_decompression
 import layers
+import matplotlib.pyplot as plt
+from hparams import load_hparams
+
+
 
 # Mappings from symbol to numeric ID and vice versa:
 _symbol_to_id = {s: i for i, s in enumerate(letters)}
@@ -117,14 +121,8 @@ class TextMelLoader(torch.utils.data.Dataset):
         melspec = librosa.feature.melspectrogram(y=audio, sr=sampling_rate,
                                                  n_fft=self.filter_length, hop_length=self.hop_length, power=1,
                                                  n_mels=self.n_mel_channels, fmin=self.mel_fmin, fmax=self.mel_fmax)
-        melspec_features = dynamic_range_compression(torch.FloatTensor(melspec.astype(np.float32)))
-        # audio_norm = audio / self.max_wav_value
-        # audio_norm = audio_norm.unsqueeze(0)
-        # audio_norm = torch.autograd.Variable(audio_norm, requires_grad=False)
-        # melspec = self.stft.mel_spectrogram(audio_norm)
-        # melspec = torch.squeeze(melspec, 0)
-
-        return melspec_features
+        log_melspec_features = dynamic_range_compression(torch.FloatTensor(melspec.astype(np.float32)))
+        return log_melspec_features
 
     def get_text(self, audiopath, text):
         text_norm, glued_text_norm, audio_list = \
@@ -235,12 +233,12 @@ def get_mel(filename, hparams):
         melspec = librosa.feature.melspectrogram(y=audio, sr=sampling_rate,
                                                  n_fft=hparams.filter_length, hop_length=hparams.hop_length, power=1,
                                                  n_mels=hparams.n_mel_channels, fmin=hparams.mel_fmin, fmax=hparams.mel_fmax)
-        melspec_features = dynamic_range_compression(torch.FloatTensor(melspec.astype(np.float32)))
-        return melspec_features
+        log_melspec_features = dynamic_range_compression(torch.FloatTensor(melspec.astype(np.float32)))
+        return log_melspec_features
 
 
 def get_mel_text_pair_inference(text, hparams):
-    audiopaths_and_text = load_filepaths_and_text(hparams.training_files)
+    audiopaths_and_text = load_filepaths_and_text(hparams.training_files_base)
     word_to_audio, audio_to_sentences = produce_inverted_index(audiopaths_and_text)
     # preprocess sentence
     text = text.lower()
@@ -262,11 +260,25 @@ def get_mel_text_pair_inference(text, hparams):
 if __name__ == "__main__":
     y, sample_rate = librosa.core.load("LJ001-0002.wav", sr=22050)
     # magnitudes1 = np.abs(librosa.stft(y, n_fft=1024, hop_length=256))
-    melspectrogram = librosa.feature.melspectrogram(y=y, sr=22050, n_fft=1024, hop_length=256, power=1)
-    # melspectrogram = librosa.feature.melspectrogram(S=magnitudes1, n_fft=1024, hop_length=256, power=2.0)
+    melspectrogram = librosa.feature.melspectrogram(y=y, sr=22050, n_fft=1024, hop_length=256, power=1,
+                                                    n_mels=80, fmin=0, fmax=8000)
 
     print('melspectrogram.shape', melspectrogram.shape)
     print(melspectrogram)
+
+    plt.figure(figsize=(10, 4))
+    plt.subplot(2, 1, 1)
+    librosa.display.specshow(np.log(melspectrogram), y_axis='mel', x_axis='time',
+                             hop_length=256, fmin=0, fmax=8000)
+    plt.title('log Mel spectrogram')
+    plt.subplot(2, 1, 2)
+    hparams = load_hparams()
+    log_mel = get_mel("LJ001-0002.wav", hparams)
+    librosa.display.specshow(log_mel.data.numpy(), y_axis='mel', x_axis='time',
+                             hop_length=256, fmin=0, fmax=8000)
+    plt.title('original Mel spectrogram')
+    plt.tight_layout()
+    plt.show()
 
     audio_signal = librosa.feature.inverse.mel_to_audio(melspectrogram, sr=22050, n_fft=1024, hop_length=256, power=2)
     print(audio_signal, audio_signal.shape)
