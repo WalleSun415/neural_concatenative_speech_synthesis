@@ -21,10 +21,10 @@ class Prenet(nn.Module):
 
     def forward(self, x):
         for linear in self.layers:
-            x = F.dropout(F.relu(linear(x)), p=0.5, training=self.training)
+            x = F.dropout(F.relu(linear(x)), p=0, training=self.training)
         x = x.permute(1, 2, 0)
         x = self.convolutions(x).permute(2, 0, 1)
-        return F.dropout(F.relu(x), p=0.5, training=self.training)
+        return F.dropout(F.relu(x), p=0, training=self.training)
 
 
 class TargetPrenet(nn.Module):
@@ -37,7 +37,7 @@ class TargetPrenet(nn.Module):
 
     def forward(self, x):
         for linear in self.layers:
-            x = F.dropout(F.relu(linear(x)), p=0.5, training=self.training)
+            x = F.dropout(F.relu(linear(x)), p=0, training=self.training)
         return x
 
 
@@ -146,8 +146,7 @@ class RecurrentDecoder(nn.Module):
         self.gate_linear_projection = LinearNorm(decoder_hidden_size+audio_encoder_size, 1, bias=True, w_init_gain='sigmoid')
 
     def decode(self, decoder_input):
-        attention_context = self.attention(self.alignment_inputs, self.alignment_inputs, self.decoder_current_state)
-        attention_context = self.attention(self.alignment_inputs, self.alignment_inputs, self.decoder_current_state)
+        attention_context = self.attention(self.alignment_inputs, self.alignment_inputs, decoder_input)
         input_and_context = torch.cat((decoder_input, attention_context), dim=-1)
         self.decoder_current_state = self.rnn(input_and_context, self.decoder_current_state)
         del input_and_context
@@ -323,7 +322,7 @@ class NeuralConcatenativeSpeechSynthesis(nn.Module):
         glued_audio_encoder_output, _ = self.glued_mel_encoder(glued_mel_padded)
 
         glued_text_padded = self.embedding(glued_text_padded).permute(0, 2, 1)
-        glued_text_padded = F.dropout(F.relu(self.text_prenet(glued_text_padded)), p=0.5, training=self.training).permute(2, 0, 1)
+        glued_text_padded = F.relu(self.text_prenet(glued_text_padded)).permute(2, 0, 1)
         glued_text_hidden_states, alignment_input = self.glued_text_decoder(glued_text_padded,
                                                                             glued_audio_encoder_output,
                                                                             glued_mel_padded)

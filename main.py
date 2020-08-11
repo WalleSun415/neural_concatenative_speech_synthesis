@@ -117,7 +117,6 @@ def train(hparams):
     iter_num = len(train_loader)
     text = "well I've got to live with her. I guess I love her, end quote."
     inputs = get_mel_text_pair_inference(text, hparams)
-
     for epoch in range(hparams.epochs):
         print("Epoch: {}".format(epoch))
         for i, batch in enumerate(BackgroundGenerator(train_loader)):
@@ -128,7 +127,6 @@ def train(hparams):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
             if i%10 == 0:
                 print('[%d, %d] loss: %.3f' % (epoch, epoch*iter_num+i, running_loss / 10))
                 running_loss = 0.0
@@ -138,14 +136,14 @@ def train(hparams):
                 # writer.add_scalar("val_gate_loss", np.log10(total_gate_loss), epoch*iter_num+i)
 
                 # training mel spectrogram
-                plot_buf = gen_plot(batch[2].cpu().data.numpy()[0], y_pred[0].cpu().data.numpy()[0], hparams)
+                plot_buf = gen_plot(x[2].cpu().data.numpy()[0].T, y_pred[0].cpu().data.numpy()[0].T, hparams)
                 image = PIL.Image.open(plot_buf)
                 image = ToTensor()(image)
                 writer.add_image('training mel spectrogram', image, epoch * iter_num + i)
 
                 # inference mel spectrogram
-                y, sample_rate = librosa.core.load("/home/swl/LJSpeech-1.1/wavs/LJ040-0209.wav", sr=22050)
-                original_mel, mel_predicted = inference(model, inputs, y, hparams)
+                audio, sample_rate = librosa.core.load("/Users/swl/Dissertation/LJSpeech-1.1/wavs/LJ040-0209.wav", sr=22050)
+                original_mel, mel_predicted = inference(model, inputs, audio, hparams)
                 plot_buf = gen_plot(original_mel, mel_predicted, hparams)
                 image = PIL.Image.open(plot_buf)
                 image = ToTensor()(image)
@@ -209,14 +207,21 @@ if __name__ == "__main__":
     hparams = load_hparams()
     torch.manual_seed(hparams.seed)
     train(hparams)
+    # batch = train(hparams)
+    # plt.figure(figsize=(10, 4))
+    # plt.subplot(1, 1, 1)
+    # melspectrogram = batch[2].data.numpy()[2]
+    # librosa.display.specshow(melspectrogram, y_axis='mel', x_axis='time',
+    #                          hop_length=hparams.hop_length, fmin=hparams.mel_fmin, fmax=hparams.mel_fmax)
+    # plt.show()
 
-    text = "Only proteid foods form new protoplasm"
-    inputs = get_mel_text_pair_inference(text, hparams)
-    model = NeuralConcatenativeSpeechSynthesis(hparams)
-    model.eval()
-    if torch.cuda.is_available():
-        model.load_state_dict(torch.load('NeuralConcate_exp_3.pth'))
-    else:
-        model.load_state_dict(torch.load('NeuralConcate_exp_3.pth', map_location=torch.device('cpu')))
-    y, sample_rate = librosa.core.load("/Users/swl/Dissertation/LJSpeech-1.1/wavs/LJ026-0113.wav", sr=22050)
-    inference_local(model, inputs, y, hparams)
+    # text = "Only proteid foods form new protoplasm"
+    # inputs = get_mel_text_pair_inference(text, hparams)
+    # model = NeuralConcatenativeSpeechSynthesis(hparams)
+    # model.eval()
+    # if torch.cuda.is_available():
+    #     model.load_state_dict(torch.load('NeuralConcate_exp_3.pth'))
+    # else:
+    #     model.load_state_dict(torch.load('NeuralConcate_exp_3.pth', map_location=torch.device('cpu')))
+    # y, sample_rate = librosa.core.load("/Users/swl/Dissertation/LJSpeech-1.1/wavs/LJ026-0113.wav", sr=22050)
+    # inference_local(model, inputs, y, hparams)
