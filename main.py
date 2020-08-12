@@ -38,8 +38,11 @@ def gen_plot(melspectrogram, mel_outputs, hparams):
                              hop_length=hparams.hop_length, fmin=hparams.mel_fmin, fmax=hparams.mel_fmax)
     plt.title('Original Mel spectrogram')
     plt.subplot(2, 1, 2)
-    librosa.display.specshow(mel_outputs, y_axis='mel', x_axis='time',
-                             hop_length=hparams.hop_length, fmin=hparams.mel_fmin, fmax=hparams.mel_fmax)
+    try:
+        librosa.display.specshow(mel_outputs, y_axis='mel', x_axis='time',
+                                 hop_length=hparams.hop_length, fmin=hparams.mel_fmin, fmax=hparams.mel_fmax)
+    except IndexError as e:
+        print("IndexError", e)
     plt.title('Generated Mel spectrogram')
     plt.savefig(buf, format='jpeg')
     buf.seek(0)
@@ -132,9 +135,9 @@ def train(hparams):
                 print('[%d, %d] loss: %.3f' % (epoch, epoch*iter_num+i, running_loss / 10))
                 running_loss = 0.0
                 # val_loss, total_mel_loss, total_gate_loss = validate(model, criterion, valset, hparams.batch_size, collate_fn)
-                # writer.add_scalar("val_loss", np.log10(val_loss), epoch*iter_num+i)
-                # writer.add_scalar("val_mel_loss", np.log10(total_mel_loss), epoch*iter_num+i)
-                # writer.add_scalar("val_gate_loss", np.log10(total_gate_loss), epoch*iter_num+i)
+                # writer.add_scalar("val_loss", val_loss, epoch*iter_num+i)
+                # writer.add_scalar("val_mel_loss", total_mel_loss, epoch*iter_num+i)
+                # writer.add_scalar("val_gate_loss", total_gate_loss, epoch*iter_num+i)
 
                 # training mel spectrogram
                 plot_buf = gen_plot(x[2].cpu().data.numpy()[0], y_pred[0].cpu().data.numpy()[0], hparams)
@@ -158,9 +161,9 @@ def train(hparams):
 
             # loss log and visualization
             running_loss += loss.item()
-            writer.add_scalar("training_loss", np.log10(loss.item()), epoch*iter_num+i)
-            writer.add_scalar("mel_loss", np.log10(mel_loss), epoch*iter_num+i)
-            writer.add_scalar("gate_loss", np.log10(gate_loss), epoch*iter_num+i)
+            writer.add_scalar("training_loss", loss.item(), epoch*iter_num+i)
+            writer.add_scalar("mel_loss", mel_loss, epoch*iter_num+i)
+            writer.add_scalar("gate_loss", gate_loss, epoch*iter_num+i)
             del loss
             del y_pred
         torch.save(obj=model.state_dict(), f=hparams.model_save_path)
@@ -176,7 +179,7 @@ def inference(model, inputs, original_audio, hparams):
                                                     n_mels=hparams.n_mel_channels, fmin=hparams.mel_fmin,
                                                     fmax=hparams.mel_fmax)
     frame_num = melspectrogram.shape[1]
-    # mel_outputs = mel_outputs.data.numpy()[:frame_num, :].T
+    print("Frame number of ground truth: ", frame_num)
     mel_outputs = mel_outputs.cpu().data.numpy().T
     model.train()
     return np.log(melspectrogram), mel_outputs

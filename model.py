@@ -204,16 +204,16 @@ class RecurrentDecoder(nn.Module):
         init_state = to_gpu(init_state).float()
         decoder_inputs = torch.cat((init_state, decoder_inputs), dim=0)
         mel_outputs, gate_outputs = [], []
-        decoder_input = init_state
+        decoder_input = self.alignment_inputs[-1, :, :]
         while len(mel_outputs) < decoder_inputs.size(0) - 1:
-            teacher_forcing = True if random.random() < 0.5 else False
             mel_output, gate_output = self.decode(decoder_input)
             mel_outputs += [mel_output.squeeze(1)]
             gate_outputs += [gate_output.squeeze(1)]
-            if teacher_forcing:
-                decoder_input = decoder_inputs[len(mel_outputs)]
-            else:
-                decoder_input = mel_output
+            decoder_input = decoder_inputs[len(mel_outputs)]
+            # if teacher_forcing:
+            #    decoder_input = decoder_inputs[len(mel_outputs)]
+            # else:
+            #     decoder_input = mel_output
 
         mel_outputs, gate_outputs = self.parse_decoder_outputs(mel_outputs, gate_outputs)
         return mel_outputs, gate_outputs
@@ -224,6 +224,7 @@ class RecurrentDecoder(nn.Module):
         decoder_input = self.init_state(alignment_inputs)
         decoder_input = to_gpu(decoder_input).float()
         mel_outputs, gate_outputs = [], []
+        decoder_input = self.alignment_inputs[-1, :, :]
         while True:
             mel_output, gate_output = self.decode(decoder_input)
             mel_outputs += [mel_output]
@@ -231,10 +232,11 @@ class RecurrentDecoder(nn.Module):
             threshold = torch.sigmoid(gate_output.data)
             # print("stop threshold: ", threshold)
             if threshold > 0.5:
+                print("Stop threshold: ", threshold)
+                print("Frame number: ", len(mel_outputs))
                 break
             elif len(mel_outputs) == 1000:
-                print("stop threshold: ", threshold)
-                print("Warning! Reached max decoder steps")
+                print("Warning! Reached max decoder steps. stop threshold: ", threshold)
                 break
             decoder_input = mel_output
         mel_outputs, gate_outputs = self.parse_decoder_outputs(mel_outputs, gate_outputs)
@@ -298,7 +300,7 @@ class NeuralConcatenativeSpeechSynthesis(nn.Module):
             mask = mask.permute(1, 0, 2)
 
             outputs[0].data.masked_fill_(mask, 0.0)
-            outputs[1].data.masked_fill_(mask[:, 0, :], 1000)  # gate energies
+            outputs[1].data.masked_fill_(mask[:, 0, :], 10)  # gate energies
 
         return outputs
 
