@@ -17,6 +17,7 @@ from utils import dynamic_range_compression, dynamic_range_decompression
 import io
 import PIL.Image
 from torchvision.transforms import ToTensor
+from scipy.io.wavfile import read
 
 
 def time_since(since):
@@ -142,7 +143,8 @@ def train(hparams):
                 writer.add_image('training mel spectrogram', image, epoch * iter_num + i)
 
                 # inference mel spectrogram
-                audio, sample_rate = librosa.core.load("/home/swl/LJSpeech-1.1/wavs/LJ040-0209.wav", sr=22050)
+                audio, sample_rate = read("/home/swl/LJSpeech-1.1/wavs/LJ040-0209.wav", sr=22050)
+                # sample_rate, audio = read("/Users/swl/Dissertation/LJSpeech-1.1/wavs/LJ040-0209.wav", sr=22050)
                 original_mel, mel_predicted = inference(model, inputs, audio, hparams)
                 plot_buf = gen_plot(original_mel, mel_predicted, hparams)
                 image = PIL.Image.open(plot_buf)
@@ -169,7 +171,8 @@ def inference(model, inputs, original_audio, hparams):
     model.eval()
     with torch.no_grad():
         mel_outputs, gate_outputs = model.inference(inputs)
-    melspectrogram = librosa.feature.melspectrogram(y=original_audio, sr=22050, n_fft=1024, hop_length=256, power=1,
+    audio_norm = original_audio / hparams.max_wav_value
+    melspectrogram = librosa.feature.melspectrogram(y=audio_norm, sr=22050, n_fft=1024, hop_length=256, power=1,
                                                     n_mels=hparams.n_mel_channels, fmin=hparams.mel_fmin,
                                                     fmax=hparams.mel_fmax)
     frame_num = melspectrogram.shape[1]

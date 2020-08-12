@@ -8,6 +8,7 @@ from utils import dynamic_range_compression, dynamic_range_decompression
 import layers
 import matplotlib.pyplot as plt
 from hparams import load_hparams
+from scipy.io.wavfile import read
 
 
 
@@ -114,11 +115,12 @@ class TextMelLoader(torch.utils.data.Dataset):
 
     def get_mel(self, filename):
         # produce target mel spectral features
-        audio, sampling_rate = librosa.core.load(filename)
+        sampling_rate, audio = read(filename)
         if sampling_rate != self.sampling_rate:
             raise ValueError("{} {} SR doesn't match target {} SR".format(
                 sampling_rate, self.sampling_rate))
-        melspec = librosa.feature.melspectrogram(y=audio, sr=sampling_rate,
+        audio_norm = audio / self.max_wav_value
+        melspec = librosa.feature.melspectrogram(y=audio_norm, sr=sampling_rate,
                                                  n_fft=self.filter_length, hop_length=self.hop_length, power=1,
                                                  n_mels=self.n_mel_channels, fmin=self.mel_fmin, fmax=self.mel_fmax)
         log_melspec_features = dynamic_range_compression(torch.FloatTensor(melspec.astype(np.float32)))
@@ -226,11 +228,12 @@ class TextMelCollate():
 
 
 def get_mel(filename, hparams):
-        audio, sampling_rate = librosa.core.load(filename)
+        sampling_rate, audio,  = read(filename)
         if sampling_rate != hparams.sampling_rate:
             raise ValueError("{} {} SR doesn't match target {} SR".format(
                 sampling_rate, hparams.sampling_rate))
-        melspec = librosa.feature.melspectrogram(y=audio, sr=sampling_rate,
+        audio_norm = audio / hparams.max_wav_value
+        melspec = librosa.feature.melspectrogram(y=audio_norm, sr=sampling_rate,
                                                  n_fft=hparams.filter_length, hop_length=hparams.hop_length, power=1,
                                                  n_mels=hparams.n_mel_channels, fmin=hparams.mel_fmin, fmax=hparams.mel_fmax)
         log_melspec_features = dynamic_range_compression(torch.FloatTensor(melspec.astype(np.float32)))

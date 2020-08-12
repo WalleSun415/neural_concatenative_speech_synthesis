@@ -76,19 +76,28 @@ class Attention(nn.Module):
 
 
 class AttentionLoop(nn.Module):
-    def __init__(self, enc_hidden_size, dec_hidden_size):
+    def __init__(self, enc_hidden_size, dec_hidden_size, method="concat"):
         super(AttentionLoop, self).__init__()
-        self.model = LinearNorm(dec_hidden_size, enc_hidden_size, bias=False)
+        self.method = method
+        if method == "general":
+            self.model = LinearNorm(dec_hidden_size, enc_hidden_size, bias=False)
+        elif method == "concat":
+            self.fc = LinearNorm(dec_hidden_size, enc_hidden_size, bias=False)
+            self.weight = nn.Parameter(torch.FloatTensor(enc_hidden_size, 1))
 
-    def forward(self, encoder_inputs, encoder_states, decoder_state):
-        # seq_len, batch, hidden_size
-        encoder_states = encoder_states.permute(1, 0, 2)
-        # seq_len, batch, hidden_size
-        encoder_inputs = encoder_inputs.permute(1, 0, 2)
-        decoder_state = self.model(decoder_state).unsqueeze(dim=-1)
-        decoder_state = torch.matmul(encoder_states, decoder_state)  # batch * seq_len * 1
-        decoder_state = F.softmax(decoder_state, dim=1)  # batch * seq_len * 1
-        return (encoder_inputs * decoder_state).sum(dim=1)
+    def forward(self, encoder_states, decoder_state):
+        if self.method == "general":
+            # seq_len, batch, hidden_size
+            encoder_states = encoder_states.permute(1, 0, 2)
+            decoder_state = self.model(decoder_state).unsqueeze(dim=-1)
+            decoder_state = torch.matmul(encoder_states, decoder_state)  # batch * seq_len * 1
+            decoder_state = F.softmax(decoder_state, dim=1)  # batch * seq_len * 1
+            return (encoder_states * decoder_state).sum(dim=1)
+        elif self.method == "concat":
+            out = torch.tanh(self.fc(decoder_state + encoder_states))
+            out = torch.matmul(out, self.weight).permute(1, 0, 2)
+            out = F.softmax(out, dim=1)
+            return (encoder_states.permute(1, 0, 2) * out).sum(dim=1)
 
 
 class AttentionDecoder(nn.Module):
@@ -140,22 +149,28 @@ class RecurrentDecoder(nn.Module):
         self.rnn_dropout = hparams.rnn_dropout
         self.n_mel_channels = hparams.n_mel_channels
 
-        self.attention = AttentionLoop(audio_encoder_size, decoder_hidden_size)
-        self.rnn = nn.GRUCell(input_size+audio_encoder_size, decoder_hidden_size, bias=False)
+        self.attention = AttentionLoop(audio_encoder_size, decoder_hidden_size, method="concat")
+        self.rnn = nn.GRUCell(audio_encoder_size, decoder_hidden_size, bias=False)
         self.spectral_linear_projection = LinearNorm(decoder_hidden_size+audio_encoder_size, audio_encoder_size)
         self.gate_linear_projection = LinearNorm(decoder_hidden_size+audio_encoder_size, 1, bias=True, w_init_gain='sigmoid')
 
     def decode(self, decoder_input):
-        attention_context = self.attention(self.alignment_inputs, self.alignment_inputs, decoder_input)
-        input_and_context = torch.cat((decoder_input, attention_context), dim=-1)
-        self.decoder_current_state = self.rnn(input_and_context, self.decoder_current_state)
-        del input_and_context
-        # self.decoder_current_state = F.relu(F.dropout(self.decoder_current_state, self.rnn_dropout, self.training))
-        decoder_hidden_attention_context = torch.cat((attention_context, self.decoder_current_state), dim=-1)
-        del attention_context
+        self.decoder_current_state = self.rnn(decoder_input, self.decoder_current_state)
+        attention_context = self.attention(self.alignment_inputs, self.decoder_current_state)
+        decoder_hidden_attention_context = torch.cat((self.decoder_current_state, attention_context), dim=-1)
         mel_output = self.spectral_linear_projection(decoder_hidden_attention_context)
         gate_output = self.gate_linear_projection(decoder_hidden_attention_context)
-        del decoder_hidden_attention_context
+
+        # attention_context = self.attention(self.alignment_inputs, decoder_input)
+        # input_and_context = torch.cat((decoder_input, attention_context), dim=-1)
+        # self.decoder_current_state = self.rnn(input_and_context, self.decoder_current_state)
+        # del input_and_context
+        # # self.decoder_current_state = F.relu(F.dropout(self.decoder_current_state, self.rnn_dropout, self.training))
+        # decoder_hidden_attention_context = torch.cat((attention_context, self.decoder_current_state), dim=-1)
+        # del attention_context
+        # mel_output = self.spectral_linear_projection(decoder_hidden_attention_context)
+        # gate_output = self.gate_linear_projection(decoder_hidden_attention_context)
+        # del decoder_hidden_attention_context
         return mel_output, gate_output
 
     def parse_decoder_outputs(self, mel_outputs, gate_outputs):
@@ -171,8 +186,7 @@ class RecurrentDecoder(nn.Module):
         gate_outpust: gate output energies
         """
         # (T_out, B) -> (B, T_out)
-        gate_outputs = torch.stack(gate_outputs).transpose(0, 1)
-        gate_outputs = gate_outputs.contiguous()
+        gate_outputs = torch.stack(gate_outputs).transpose(0, 1).contiguous()
         # (T_out, B, n_mel_channels) -> (B, T_out, n_mel_channels)
         mel_outputs = torch.stack(mel_outputs).transpose(0, 1).contiguous()
         return mel_outputs, gate_outputs
@@ -205,11 +219,14 @@ class RecurrentDecoder(nn.Module):
         mel_outputs, gate_outputs = [], []
         while True:
             mel_output, gate_output = self.decode(decoder_input)
-            mel_outputs += [mel_output.squeeze(1)]
-            gate_outputs += [gate_output.squeeze(1)]
-            if torch.sigmoid(gate_output.data) >0.5:
+            mel_outputs += [mel_output]
+            gate_outputs += [gate_output]
+            threshold = torch.sigmoid(gate_output.data)
+            # print("stop threshold: ", threshold)
+            if threshold > 0.5:
                 break
             elif len(mel_outputs) == 1000:
+                print("stop threshold: ", threshold)
                 print("Warning! Reached max decoder steps")
                 break
             decoder_input = mel_output
@@ -331,7 +348,7 @@ class NeuralConcatenativeSpeechSynthesis(nn.Module):
         _, weighted_alignment = self.target_text_decoder(text_padded,
                                                          glued_text_hidden_states, alignment_input)
         mel_outputs, gate_outputs = self.decoder.inference(weighted_alignment)
-        mel_outputs = self.postnet(mel_outputs)
+        mel_outputs = self.postnet(F.relu(mel_outputs))
         return mel_outputs.squeeze(0), gate_outputs
 
 

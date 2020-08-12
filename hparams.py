@@ -45,20 +45,20 @@ def load_hparams():
         # Model Parameters             #
         ################################
         n_symbols=len(letters),
-        symbols_embedding_dim=256,
+        symbols_embedding_dim=512,
 
         # Audio Encoder Parameters
         encoder_rnn_dim=512,
-        prenet_dim=256,
-        audio_kernel_size=15, # audio
-        audio_stride=15,
+        prenet_dim=512,
+        audio_kernel_size=11, # audio
+        audio_stride=11,
         decoder_kernel_size=5,  # text
         text_stride=5,
         # Text Decoder parameters
-        decoder_rnn_dim=128,
+        decoder_rnn_dim=1024,
 
         # Mel Decoder parameters
-        mel_decoder_rnn_dim=256,
+        mel_decoder_rnn_dim=512,
         rnn_dropout=0.1,
         ################################
         # Optimization Hyperparameters #
