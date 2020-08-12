@@ -143,7 +143,7 @@ def train(hparams):
                 writer.add_image('training mel spectrogram', image, epoch * iter_num + i)
 
                 # inference mel spectrogram
-                audio, sample_rate = read("/home/swl/LJSpeech-1.1/wavs/LJ040-0209.wav", sr=22050)
+                audio, sample_rate = read("/home/swl/LJSpeech-1.1/wavs/LJ040-0209.wav")
                 # sample_rate, audio = read("/Users/swl/Dissertation/LJSpeech-1.1/wavs/LJ040-0209.wav", sr=22050)
                 original_mel, mel_predicted = inference(model, inputs, audio, hparams)
                 plot_buf = gen_plot(original_mel, mel_predicted, hparams)
