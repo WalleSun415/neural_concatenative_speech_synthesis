@@ -3,7 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 from utils import to_gpu, get_mask_from_lengths
 from layers import LinearNorm, ConvNorm
-
+import random
 
 class Prenet(nn.Module):
     def __init__(self, in_dim, sizes, hparams):
@@ -204,10 +204,17 @@ class RecurrentDecoder(nn.Module):
         init_state = to_gpu(init_state).float()
         decoder_inputs = torch.cat((init_state, decoder_inputs), dim=0)
         mel_outputs, gate_outputs = [], []
+        decoder_input = init_state
         while len(mel_outputs) < decoder_inputs.size(0) - 1:
-            mel_output, gate_output = self.decode(decoder_inputs[len(mel_outputs)])
+            teacher_forcing = True if random.random() < 0.5 else False
+            mel_output, gate_output = self.decode(decoder_input)
             mel_outputs += [mel_output.squeeze(1)]
             gate_outputs += [gate_output.squeeze(1)]
+            if teacher_forcing:
+                decoder_input = decoder_inputs[len(mel_outputs)]
+            else:
+                decoder_input = mel_output
+
         mel_outputs, gate_outputs = self.parse_decoder_outputs(mel_outputs, gate_outputs)
         return mel_outputs, gate_outputs
 
@@ -319,7 +326,7 @@ class NeuralConcatenativeSpeechSynthesis(nn.Module):
         mel_padded = mel_padded.permute(2, 0, 1)
         mel_padded = self.target_audio_prenet(mel_padded)
         mel_outputs, gate_outputs = self.decoder(mel_padded, weighted_alignment)
-        mel_outputs = self.postnet(mel_outputs).transpose(1, 2)
+        mel_outputs = self.postnet(F.relu(mel_outputs)).transpose(1, 2)
         del mel_padded
         del weighted_alignment
         return self.parse_output(
