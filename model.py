@@ -317,7 +317,8 @@ class NeuralConcatenativeSpeechSynthesis(nn.Module):
         glued_text_padded = self.embedding(glued_text_padded).permute(0, 2, 1)
         glued_text_padded = F.dropout(F.relu(self.text_prenet(glued_text_padded)), p=0.5, training=self.training).permute(2, 0, 1)
         glued_text_hidden_states, alignment_input = self.glued_text_decoder(glued_text_padded,
-                                                                            glued_audio_encoder_output, glued_mel_padded)
+                                                                            glued_audio_encoder_output,
+                                                                            glued_mel_padded)
         del glued_text_padded
         del glued_mel_padded
         del glued_audio_encoder_output
