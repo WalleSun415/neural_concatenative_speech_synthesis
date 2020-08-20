@@ -148,7 +148,12 @@ def train(hparams):
                 # inference mel spectrogram
                 # sample_rate, audio = read("/home/swl/LJSpeech-1.1/wavs/LJ006-0115.wav")
                 sample_rate, audio = read("/Users/swl/Dissertation/LJSpeech-1.1/wavs/LJ006-0115.wav")
-                original_mel, mel_predicted = inference(model, inputs, audio, hparams)
+                inference_model = NeuralConcatenativeSpeechSynthesis(hparams)
+                if torch.cuda.is_available():
+                    inference_model.load_state_dict(torch.load(hparams.model_save_path))
+                else:
+                    inference_model.load_state_dict(torch.load(hparams.model_save_path, map_location=torch.device('cpu')))
+                original_mel, mel_predicted = inference(inference_model, inputs, audio, hparams)
                 plot_buf = gen_plot(original_mel, mel_predicted, hparams)
                 image = PIL.Image.open(plot_buf)
                 image = ToTensor()(image)
