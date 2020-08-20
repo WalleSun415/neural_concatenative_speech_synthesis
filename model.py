@@ -312,7 +312,8 @@ class NeuralConcatenativeSpeechSynthesis(nn.Module):
         glued_audio_encoder_output, _ = self.glued_mel_encoder(glued_mel_padded)
 
         glued_text_padded = self.embedding(glued_text_padded).permute(0, 2, 1)
-        glued_text_padded = F.dropout(F.relu(self.text_prenet(glued_text_padded)), p=0.5, training=self.training).permute(2, 0, 1)
+        # glued_text_padded = F.dropout(F.relu(self.text_prenet(glued_text_padded)), p=0.5, training=self.training).permute(2, 0, 1)
+        glued_text_padded = F.relu(self.text_prenet(glued_text_padded)).permute(2, 0, 1)
         glued_text_hidden_states, alignment_input = self.glued_text_decoder(glued_text_padded,
                                                                             glued_audio_encoder_output,
                                                                             glued_mel_padded)
@@ -321,7 +322,9 @@ class NeuralConcatenativeSpeechSynthesis(nn.Module):
         del glued_audio_encoder_output
         # Text to text seq2seq(Pseudo alignment 2)
         text_padded = self.embedding(text_padded).permute(1, 0, 2)
-        _, weighted_alignment = self.target_text_decoder(text_padded, glued_text_hidden_states, alignment_input)
+        _, weighted_alignment = self.target_text_decoder(text_padded,
+                                                         glued_text_hidden_states,
+                                                         alignment_input)
         del text_padded
         # Decoder
         mel_padded = mel_padded.permute(2, 0, 1)
@@ -354,7 +357,8 @@ class NeuralConcatenativeSpeechSynthesis(nn.Module):
 
         text_padded = self.embedding(text_padded).permute(1, 0, 2)
         _, weighted_alignment = self.target_text_decoder(text_padded,
-                                                         glued_text_hidden_states, alignment_input)
+                                                         glued_text_hidden_states,
+                                                         alignment_input)
         mel_outputs, gate_outputs = self.decoder.inference(weighted_alignment)
         mel_outputs = self.postnet(F.relu(mel_outputs))
         return mel_outputs.squeeze(0), gate_outputs
