@@ -146,8 +146,8 @@ def train(hparams):
                 writer.add_image('training mel spectrogram', image, epoch * iter_num + i)
 
                 # inference mel spectrogram
-                # sample_rate, audio = read("/home/swl/LJSpeech-1.1/wavs/LJ006-0115.wav")
-                sample_rate, audio = read("/Users/swl/Dissertation/LJSpeech-1.1/wavs/LJ006-0115.wav")
+                sample_rate, audio = read("/home/swl/LJSpeech-1.1/wavs/LJ006-0115.wav")
+                # sample_rate, audio = read("/Users/swl/Dissertation/LJSpeech-1.1/wavs/LJ006-0115.wav")
                 inference_model = NeuralConcatenativeSpeechSynthesis(hparams)
                 if torch.cuda.is_available():
                     inference_model.load_state_dict(torch.load(hparams.model_save_path))

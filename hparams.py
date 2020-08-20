@@ -17,7 +17,7 @@ def load_hparams():
         # Experiment Parameters        #
         ################################
         epochs=5000,
-        exp_path = "runs/exp11",
+        exp_path = "runs/exp12",
         seed=1234,
         glued_num=1,
         model_save_path="NeuralConcate.pth",
@@ -27,7 +27,7 @@ def load_hparams():
         ################################
         training_files='filelists/temp_colab_audio_text_train_filelist.txt',
         validation_files='filelists/colab_audio_text_val_filelist.txt',
-        training_files_base='filelists/temp_colab_audio_text_train_filelist.txt',
+        training_files_base='filelists/colab_audio_text_train_filelist.txt',
 
         ################################
         # Audio Parameters             #
@@ -59,7 +59,7 @@ def load_hparams():
 
         # Mel Decoder parameters
         mel_decoder_rnn_dim=512,
-        rnn_dropout=0.1,
+        rnn_dropout=0.0,
         ################################
         # Optimization Hyperparameters #
         ################################
