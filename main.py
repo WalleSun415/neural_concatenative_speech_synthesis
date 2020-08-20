@@ -153,6 +153,7 @@ def train(hparams):
                     inference_model.load_state_dict(torch.load(hparams.model_save_path))
                 else:
                     inference_model.load_state_dict(torch.load(hparams.model_save_path, map_location=torch.device('cpu')))
+                inference_model.to(device)
                 original_mel, mel_predicted = inference(inference_model, inputs, audio, hparams)
                 plot_buf = gen_plot(original_mel, mel_predicted, hparams)
                 image = PIL.Image.open(plot_buf)
