@@ -150,27 +150,24 @@ class RecurrentDecoder(nn.Module):
         self.n_mel_channels = hparams.n_mel_channels
 
         self.attention = AttentionLoop(audio_encoder_size, decoder_hidden_size, method="concat")
-        self.rnn = nn.GRUCell(audio_encoder_size, decoder_hidden_size, bias=False)
-        self.spectral_linear_projection = LinearNorm(decoder_hidden_size+audio_encoder_size, audio_encoder_size)
-        self.gate_linear_projection = LinearNorm(decoder_hidden_size+audio_encoder_size, 1, bias=True, w_init_gain='sigmoid')
+        self.rnn = nn.GRUCell(input_size+audio_encoder_size, decoder_hidden_size, bias=False)
+        self.spectral_linear_projection = LinearNorm(audio_encoder_size, audio_encoder_size)
+        self.gate_linear_projection = LinearNorm(audio_encoder_size, 1, bias=True, w_init_gain='sigmoid')
 
     def decode(self, decoder_input):
-        self.decoder_current_state = self.rnn(decoder_input, self.decoder_current_state)
-        attention_context = self.attention(self.alignment_inputs, self.decoder_current_state)
-        decoder_hidden_attention_context = torch.cat((self.decoder_current_state, attention_context), dim=-1)
-        mel_output = self.spectral_linear_projection(decoder_hidden_attention_context)
-        gate_output = self.gate_linear_projection(decoder_hidden_attention_context)
-
-        # attention_context = self.attention(self.alignment_inputs, decoder_input)
-        # input_and_context = torch.cat((decoder_input, attention_context), dim=-1)
-        # self.decoder_current_state = self.rnn(input_and_context, self.decoder_current_state)
-        # del input_and_context
-        # # self.decoder_current_state = F.relu(F.dropout(self.decoder_current_state, self.rnn_dropout, self.training))
-        # decoder_hidden_attention_context = torch.cat((attention_context, self.decoder_current_state), dim=-1)
-        # del attention_context
+        # self.decoder_current_state = self.rnn(decoder_input, self.decoder_current_state)
+        # attention_context = self.attention(self.alignment_inputs, self.decoder_current_state)
+        # decoder_hidden_attention_context = torch.cat((self.decoder_current_state, attention_context), dim=-1)
         # mel_output = self.spectral_linear_projection(decoder_hidden_attention_context)
         # gate_output = self.gate_linear_projection(decoder_hidden_attention_context)
-        # del decoder_hidden_attention_context
+
+        attention_context = self.attention(self.alignment_inputs, self.decoder_current_state)
+        input_and_context = torch.cat((decoder_input, attention_context), dim=-1)
+        self.decoder_current_state = self.rnn(input_and_context, self.decoder_current_state)
+        # self.decoder_current_state = F.relu(F.dropout(self.decoder_current_state, self.rnn_dropout, self.training))
+        # decoder_hidden_attention_context = torch.cat((attention_context, self.decoder_current_state), dim=-1)
+        mel_output = self.spectral_linear_projection(self.decoder_current_state)
+        gate_output = self.gate_linear_projection(self.decoder_current_state)
         return mel_output, gate_output
 
     def parse_decoder_outputs(self, mel_outputs, gate_outputs):
