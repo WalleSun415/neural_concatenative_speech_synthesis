@@ -119,7 +119,7 @@ def train(hparams):
     running_loss = 0.0
     writer = SummaryWriter(hparams.exp_path)
     iter_num = len(train_loader)
-    text = "Webster, it may be mentioned here, was one of the worst prisoners ever remembered in Newgate"
+    text = "Their original capital had been a few shillings, and for this they purchased the right to tax their fellows to the extent of pounds per week."
     inputs = get_mel_text_pair_inference(text, hparams)
     for epoch in range(hparams.epochs):
         print("Epoch: {}".format(epoch))
@@ -146,8 +146,8 @@ def train(hparams):
                 writer.add_image('training mel spectrogram', image, epoch * iter_num + i)
 
                 # inference mel spectrogram
-                # sample_rate, audio = read("/home/swl/LJSpeech-1.1/wavs/LJ018-0334.wav")
-                sample_rate, audio = read("/Users/swl/Dissertation/LJSpeech-1.1/wavs/LJ018-0334.wav")
+                # sample_rate, audio = read("/home/swl/LJSpeech-1.1/wavs/LJ006-0115.wav")
+                sample_rate, audio = read("/Users/swl/Dissertation/LJSpeech-1.1/wavs/LJ006-0115.wav")
                 original_mel, mel_predicted = inference(model, inputs, audio, hparams)
                 plot_buf = gen_plot(original_mel, mel_predicted, hparams)
                 image = PIL.Image.open(plot_buf)
