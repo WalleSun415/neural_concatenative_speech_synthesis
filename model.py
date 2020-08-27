@@ -72,7 +72,7 @@ class Attention(nn.Module):
         decoder_states = torch.matmul(decoder_states, encoder_states)
         encoder_inputs = encoder_inputs.permute(1, 0, 2)
         decoder_states = F.softmax(decoder_states, dim=2)  # batch * seq_len * 1
-        return torch.matmul(decoder_states, encoder_inputs).permute(1, 0, 2)
+        return torch.matmul(decoder_states, encoder_inputs).permute(1, 0, 2), decoder_states
 
 
 class AttentionLoop(nn.Module):
@@ -83,7 +83,7 @@ class AttentionLoop(nn.Module):
             self.model = LinearNorm(dec_hidden_size, enc_hidden_size, bias=False)
         elif method == "concat":
             self.fc = LinearNorm(dec_hidden_size, enc_hidden_size, bias=False)
-            self.weight = nn.Parameter(torch.FloatTensor(enc_hidden_size, 1))
+            self.weight = nn.Parameter(torch.zeros(enc_hidden_size, 1))
 
     def forward(self, encoder_states, decoder_state):
         if self.method == "general":
@@ -92,12 +92,12 @@ class AttentionLoop(nn.Module):
             decoder_state = self.model(decoder_state).unsqueeze(dim=-1)
             decoder_state = torch.matmul(encoder_states, decoder_state)  # batch * seq_len * 1
             decoder_state = F.softmax(decoder_state, dim=1)  # batch * seq_len * 1
-            return (encoder_states * decoder_state).sum(dim=1)
+            return (encoder_states * decoder_state).sum(dim=1), decoder_state
         elif self.method == "concat":
-            out = torch.tanh(self.fc(decoder_state + encoder_states))
-            out = torch.matmul(out, self.weight).permute(1, 0, 2)
-            out = F.softmax(out, dim=1)
-            return (encoder_states.permute(1, 0, 2) * out).sum(dim=1)
+            out1 = torch.tanh(self.fc(decoder_state + encoder_states))
+            out2 = torch.matmul(out1, self.weight).permute(1, 0, 2)
+            out3 = F.softmax(out2, dim=1)
+            return (encoder_states.permute(1, 0, 2) * out3).sum(dim=1), out3.squeeze(dim=-1)
 
 
 class AttentionDecoder(nn.Module):
@@ -120,8 +120,8 @@ class AttentionDecoder(nn.Module):
         '''
         # sequence of hidden state
         decoder_hidden_states, _ = self.rnn(decoder_inputs)
-        attention_distribution = self.attention(encoder_inputs, enc_hidden_states, decoder_hidden_states)
-        return decoder_hidden_states, attention_distribution
+        attention_distribution, attention_weights = self.attention(encoder_inputs, enc_hidden_states, decoder_hidden_states)
+        return decoder_hidden_states, attention_distribution, attention_weights
 
 
 class AudioEncoder(nn.Module):
@@ -161,16 +161,16 @@ class RecurrentDecoder(nn.Module):
         # mel_output = self.spectral_linear_projection(decoder_hidden_attention_context)
         # gate_output = self.gate_linear_projection(decoder_hidden_attention_context)
 
-        attention_context = self.attention(self.alignment_inputs, self.decoder_current_state)
+        attention_context, attention_weight = self.attention(self.alignment_inputs, self.decoder_current_state)
         input_and_context = torch.cat((decoder_input, attention_context), dim=-1)
         self.decoder_current_state = self.rnn(input_and_context, self.decoder_current_state)
         # self.decoder_current_state = F.relu(F.dropout(self.decoder_current_state, self.rnn_dropout, self.training))
         # decoder_hidden_attention_context = torch.cat((attention_context, self.decoder_current_state), dim=-1)
         mel_output = self.spectral_linear_projection(self.decoder_current_state)
         gate_output = self.gate_linear_projection(self.decoder_current_state)
-        return mel_output, gate_output
+        return mel_output, gate_output, attention_weight
 
-    def parse_decoder_outputs(self, mel_outputs, gate_outputs):
+    def parse_decoder_outputs(self, mel_outputs, gate_outputs, attention_weights):
         """ Prepares decoder outputs for output
         PARAMS
         ------
@@ -186,7 +186,8 @@ class RecurrentDecoder(nn.Module):
         gate_outputs = torch.stack(gate_outputs).transpose(0, 1).contiguous()
         # (T_out, B, n_mel_channels) -> (B, T_out, n_mel_channels)
         mel_outputs = torch.stack(mel_outputs).transpose(0, 1).contiguous()
-        return mel_outputs, gate_outputs
+        attention_weights = torch.stack(attention_weights).transpose(0, 1).contiguous()
+        return mel_outputs, gate_outputs, attention_weights
 
     def forward(self, decoder_inputs, alignment_inputs):
         '''
@@ -200,33 +201,35 @@ class RecurrentDecoder(nn.Module):
         init_state = self.init_state(alignment_inputs).unsqueeze(0)
         init_state = to_gpu(init_state).float()
         decoder_inputs = torch.cat((init_state, decoder_inputs), dim=0)
-        mel_outputs, gate_outputs = [], []
+        mel_outputs, gate_outputs, attention_weights = [], [], []
         # decoder_input = self.alignment_inputs[-1, :, :]
         decoder_input = decoder_inputs[len(mel_outputs)]
         while len(mel_outputs) < decoder_inputs.size(0) - 1:
-            mel_output, gate_output = self.decode(decoder_input)
+            mel_output, gate_output, attention_weight = self.decode(decoder_input)
             mel_outputs += [mel_output.squeeze(1)]
             gate_outputs += [gate_output.squeeze(1)]
+            attention_weights += [attention_weight.squeeze(1)]
             decoder_input = decoder_inputs[len(mel_outputs)]
             # if teacher_forcing:
             #    decoder_input = decoder_inputs[len(mel_outputs)]
             # else:
             #     decoder_input = mel_output
 
-        mel_outputs, gate_outputs = self.parse_decoder_outputs(mel_outputs, gate_outputs)
-        return mel_outputs, gate_outputs
+        mel_outputs, gate_outputs, attention_weights = self.parse_decoder_outputs(mel_outputs, gate_outputs, attention_weights)
+        return mel_outputs, gate_outputs, attention_weights
 
     def inference(self, alignment_inputs):
         self.decoder_current_state = torch.zeros((1, self.decoder_hidden_size), requires_grad=True)
         self.decoder_current_state = to_gpu(self.decoder_current_state)
         decoder_input = self.init_state(alignment_inputs)
         decoder_input = to_gpu(decoder_input).float()
-        mel_outputs, gate_outputs = [], []
+        mel_outputs, gate_outputs, attention_weights = [], [], []
         # decoder_input = self.alignment_inputs[-1, :, :]
         while True:
-            mel_output, gate_output = self.decode(decoder_input)
+            mel_output, gate_output, attention_weight = self.decode(decoder_input)
             mel_outputs += [mel_output]
             gate_outputs += [gate_output]
+            attention_weights += [attention_weight]
             threshold = torch.sigmoid(gate_output.data)
             # print("stop threshold: ", threshold)
             if threshold > 0.5:
@@ -237,8 +240,8 @@ class RecurrentDecoder(nn.Module):
                 print("Warning! Reached max decoder steps. stop threshold: ", threshold)
                 break
             decoder_input = mel_output
-        mel_outputs, gate_outputs = self.parse_decoder_outputs(mel_outputs, gate_outputs)
-        return mel_outputs, gate_outputs
+        mel_outputs, gate_outputs, attention_weights = self.parse_decoder_outputs(mel_outputs, gate_outputs, attention_weights)
+        return mel_outputs, gate_outputs, attention_weights
 
     def init_state(self, alignment_inputs):
         # decoder_inputs: (batch, n_mel_channel, seq_len)
@@ -314,28 +317,24 @@ class NeuralConcatenativeSpeechSynthesis(nn.Module):
         glued_text_padded = self.embedding(glued_text_padded).permute(0, 2, 1)
         # glued_text_padded = F.dropout(F.relu(self.text_prenet(glued_text_padded)), p=0.5, training=self.training).permute(2, 0, 1)
         glued_text_padded = F.relu(self.text_prenet(glued_text_padded)).permute(2, 0, 1)
-        glued_text_hidden_states, alignment_input = self.glued_text_decoder(glued_text_padded,
+        glued_text_hidden_states, alignment_input, align1_attention_weights = self.glued_text_decoder(glued_text_padded,
                                                                             glued_audio_encoder_output,
                                                                             glued_mel_padded)
-        del glued_text_padded
-        del glued_mel_padded
-        del glued_audio_encoder_output
         # Text to text seq2seq(Pseudo alignment 2)
         text_padded = self.embedding(text_padded).permute(1, 0, 2)
-        _, weighted_alignment = self.target_text_decoder(text_padded,
+        _, weighted_alignment, align2_attention_weights = self.target_text_decoder(text_padded,
                                                          glued_text_hidden_states,
                                                          alignment_input)
-        del text_padded
         # Decoder
         mel_padded = mel_padded.permute(2, 0, 1)
         mel_padded = self.target_audio_prenet(mel_padded)
-        mel_outputs, gate_outputs = self.decoder(mel_padded, weighted_alignment)
+        mel_outputs, gate_outputs, attention_weights = self.decoder(mel_padded, weighted_alignment)
         mel_outputs = self.postnet(F.relu(mel_outputs)).transpose(1, 2)
         del mel_padded
         del weighted_alignment
         return self.parse_output(
             [mel_outputs, gate_outputs],
-            output_lengths)
+            output_lengths), align1_attention_weights, align2_attention_weights, attention_weights
 
     def inference(self, inputs):
         text_padded, glued_text_padded, glued_mel_padded = inputs
@@ -351,17 +350,17 @@ class NeuralConcatenativeSpeechSynthesis(nn.Module):
 
         glued_text_padded = self.embedding(glued_text_padded).permute(0, 2, 1)
         glued_text_padded = F.relu(self.text_prenet(glued_text_padded)).permute(2, 0, 1)
-        glued_text_hidden_states, alignment_input = self.glued_text_decoder(glued_text_padded,
+        glued_text_hidden_states, alignment_input, align1_attention_weights = self.glued_text_decoder(glued_text_padded,
                                                                             glued_audio_encoder_output,
                                                                             glued_mel_padded)
 
         text_padded = self.embedding(text_padded).permute(1, 0, 2)
-        _, weighted_alignment = self.target_text_decoder(text_padded,
+        _, weighted_alignment, align2_attention_weights = self.target_text_decoder(text_padded,
                                                          glued_text_hidden_states,
                                                          alignment_input)
-        mel_outputs, gate_outputs = self.decoder.inference(weighted_alignment)
+        mel_outputs, gate_outputs, attention_weights = self.decoder.inference(weighted_alignment)
         mel_outputs = self.postnet(F.relu(mel_outputs))
-        return mel_outputs.squeeze(0), gate_outputs
+        return mel_outputs.squeeze(0), gate_outputs, align1_attention_weights, align2_attention_weights, attention_weights
 
 
 if __name__ == "__main__":

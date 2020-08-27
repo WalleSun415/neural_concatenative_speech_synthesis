@@ -50,6 +50,31 @@ def gen_plot(melspectrogram, mel_outputs, hparams):
     return buf
 
 
+def atten_matrix_plot(writer, step, train_matrix, infer_matrix, title):
+    buf = io.BytesIO()
+    fig = plt.figure()
+    ax = fig.add_subplot(2, 1, 1)
+    cax = ax.matshow(train_matrix.data.numpy())
+    fig.colorbar(cax)
+    ax.grid(False)
+    plt.tight_layout()
+    plt.title("train matrix")
+
+    ax = fig.add_subplot(2, 1, 2)
+    cax = ax.matshow(infer_matrix.data.numpy())
+    fig.colorbar(cax)
+    ax.grid(False)
+    plt.tight_layout()
+    plt.title("infer matrix")
+
+    plt.savefig(buf, format='jpeg')
+    buf.seek(0)
+    plt.close()
+    image = PIL.Image.open(buf)
+    image = ToTensor()(image)
+    writer.add_image(title, image, step)
+
+
 def gen_audio(melspectrogram, mel_outputs, hparams):
     melspectrogram = dynamic_range_decompression(melspectrogram)
     mel_outputs = dynamic_range_decompression(mel_outputs)
@@ -70,7 +95,7 @@ def prepare_dataloaders(hparams):
     valset = TextMelLoader(hparams.validation_files, hparams)
     collate_fn = TextMelCollate()
 
-    train_loader = DataLoader(trainset, num_workers=2, shuffle=True,
+    train_loader = DataLoader(trainset, num_workers=2, shuffle=False,
                               sampler=None,
                               batch_size=hparams.batch_size, pin_memory=False,
                               drop_last=True, collate_fn=collate_fn)
@@ -126,13 +151,14 @@ def train(hparams):
         for i, batch in enumerate(BackgroundGenerator(train_loader)):
             # print(len(train_loader))
             x, y = model.parse_batch(batch)
-            y_pred = model(x)
+            y_pred, align1_attention_weights, align2_attention_weights, attention_weights = model(x)
             loss, mel_loss, gate_loss = criterion(y_pred, y)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             if i%10 == 0:
-                print('[%d, %d] loss: %.3f' % (epoch, epoch*iter_num+i, running_loss / 10))
+                step = epoch * iter_num + i
+                print('[%d, %d] loss: %.3f' % (epoch, step, running_loss / 10))
                 running_loss = 0.0
                 # val_loss, total_mel_loss, total_gate_loss = validate(model, criterion, valset, hparams.batch_size, collate_fn)
                 # writer.add_scalar("val_loss", val_loss, epoch*iter_num+i)
@@ -143,22 +169,27 @@ def train(hparams):
                 plot_buf = gen_plot(x[2].cpu().data.numpy()[0], y_pred[0].cpu().data.numpy()[0], hparams)
                 image = PIL.Image.open(plot_buf)
                 image = ToTensor()(image)
-                writer.add_image('training mel spectrogram', image, epoch * iter_num + i)
+                writer.add_image('training mel spectrogram', image, step)
 
                 # inference mel spectrogram
-                sample_rate, audio = read("/home/swl/LJSpeech-1.1/wavs/LJ006-0115.wav")
-                # sample_rate, audio = read("/Users/swl/Dissertation/LJSpeech-1.1/wavs/LJ006-0115.wav")
-                inference_model = NeuralConcatenativeSpeechSynthesis(hparams)
-                if torch.cuda.is_available():
-                    inference_model.load_state_dict(torch.load(hparams.model_save_path))
-                else:
-                    inference_model.load_state_dict(torch.load(hparams.model_save_path, map_location=torch.device('cpu')))
-                inference_model.to(device)
-                original_mel, mel_predicted = inference(inference_model, inputs, audio, hparams)
+                # sample_rate, audio = read("/home/swl/LJSpeech-1.1/wavs/LJ006-0115.wav")
+                sample_rate, audio = read("/Users/swl/Dissertation/LJSpeech-1.1/wavs/LJ006-0115.wav")
+                # inference_model = NeuralConcatenativeSpeechSynthesis(hparams)
+                # if torch.cuda.is_available():
+                #     inference_model.load_state_dict(torch.load(hparams.model_save_path))
+                # else:
+                #     inference_model.load_state_dict(torch.load(hparams.model_save_path, map_location=torch.device('cpu')))
+                # inference_model.to(device)
+                # original_mel, mel_predicted = inference(inference_model, inputs, audio, hparams)
+                original_mel, mel_predicted, infer_align1_attention_weights, infer_align2_attention_weights, infer_attention_weights = \
+                    inference(model, inputs, audio, hparams)
+                atten_matrix_plot(writer, step, align1_attention_weights[0], infer_align1_attention_weights[0], "alignment1")
+                atten_matrix_plot(writer, step, align2_attention_weights[0], infer_align2_attention_weights[0], "alignment2")
+                atten_matrix_plot(writer, step, attention_weights[0], infer_attention_weights[0], "decoder attention")
                 plot_buf = gen_plot(original_mel, mel_predicted, hparams)
                 image = PIL.Image.open(plot_buf)
                 image = ToTensor()(image)
-                writer.add_image('inference mel spectrogram', image, epoch * iter_num + i)
+                writer.add_image('inference mel spectrogram', image, step)
 
                 # audio during training
                 #orig_audio, gener_audio = gen_audio(batch[2].cpu().data[0], y_pred[0].cpu().data[0], hparams)
@@ -179,7 +210,7 @@ def train(hparams):
 def inference(model, inputs, original_audio, hparams):
     model.eval()
     with torch.no_grad():
-        mel_outputs, gate_outputs = model.inference(inputs)
+        mel_outputs, gate_outputs, align1_attention_weights, align2_attention_weights, attention_weights = model.inference(inputs)
     audio_norm = original_audio / hparams.max_wav_value
     melspectrogram = librosa.feature.melspectrogram(y=audio_norm, sr=22050, n_fft=1024, hop_length=256, power=1,
                                                     n_mels=hparams.n_mel_channels, fmin=hparams.mel_fmin,
@@ -188,7 +219,7 @@ def inference(model, inputs, original_audio, hparams):
     print("Frame number of ground truth: ", frame_num)
     mel_outputs = mel_outputs.cpu().data.numpy().T
     model.train()
-    return np.log(melspectrogram), mel_outputs
+    return np.log(melspectrogram), mel_outputs, align1_attention_weights, align2_attention_weights, attention_weights
 
 
 def inference_local(model, inputs, original_audio, hparams):
