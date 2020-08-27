@@ -183,9 +183,9 @@ def train(hparams):
                 # original_mel, mel_predicted = inference(inference_model, inputs, audio, hparams)
                 original_mel, mel_predicted, infer_align1_attention_weights, infer_align2_attention_weights, infer_attention_weights = \
                     inference(model, inputs, audio, hparams)
-                atten_matrix_plot(writer, step, align1_attention_weights[0], infer_align1_attention_weights[0], "alignment1")
-                atten_matrix_plot(writer, step, align2_attention_weights[0], infer_align2_attention_weights[0], "alignment2")
-                atten_matrix_plot(writer, step, attention_weights[0], infer_attention_weights[0], "decoder attention")
+                atten_matrix_plot(writer, step, align1_attention_weights[0].cpu(), infer_align1_attention_weights[0].cpu(), "alignment1")
+                atten_matrix_plot(writer, step, align2_attention_weights[0].cpu(), infer_align2_attention_weights[0].cpu(), "alignment2")
+                atten_matrix_plot(writer, step, attention_weights[0].cpu(), infer_attention_weights[0].cpu(), "decoder attention")
                 plot_buf = gen_plot(original_mel, mel_predicted, hparams)
                 image = PIL.Image.open(plot_buf)
                 image = ToTensor()(image)
