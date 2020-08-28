@@ -144,8 +144,8 @@ def train(hparams):
     running_loss = 0.0
     writer = SummaryWriter(hparams.exp_path)
     iter_num = len(train_loader)
-    text = "Their original capital had been a few shillings, and for this they purchased the right to tax their fellows to the extent of pounds per week."
-    inputs = get_mel_text_pair_inference(text, hparams)
+    # text = "Their original capital had been a few shillings, and for this they purchased the right to tax their fellows to the extent of pounds per week."
+    inputs = get_mel_text_pair_inference(hparams)
     for epoch in range(hparams.epochs):
         print("Epoch: {}".format(epoch))
         for i, batch in enumerate(BackgroundGenerator(train_loader)):

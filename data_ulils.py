@@ -19,7 +19,7 @@ _whitespace_re = re.compile(r'\s+')
 _symbols = re.compile(r'[\!\'\(\)\,\.\:\;\?\-]')
 
 
-def text_to_sequence(audiopath, text, word_to_audio, audio_to_sentences, glued_num):
+def text_to_sequence(audiopath, text, word_to_audio, audio_to_sentences, glued_num, seed):
     sequence = []
     glued_sequence = []
     audio_list = []
@@ -30,6 +30,7 @@ def text_to_sequence(audiopath, text, word_to_audio, audio_to_sentences, glued_n
     for word in text.split():
         # avoid less than N audios
         if len(word_to_audio[word]) > glued_num:
+            random.seed(seed)
             audio_set = random.sample(word_to_audio[word], glued_num)
         else:
             audio_set = word_to_audio[word]
@@ -91,6 +92,7 @@ class TextMelLoader(torch.utils.data.Dataset):
         self.mel_fmax = hparams.mel_fmax
         self.word_to_audio, self.audio_to_sentences = produce_inverted_index(self.audiopaths_and_text)
         self.glued_num = hparams.glued_num
+        self.seed = hparams.seed
 
 
         random.seed(hparams.seed)
@@ -128,7 +130,7 @@ class TextMelLoader(torch.utils.data.Dataset):
 
     def get_text(self, audiopath, text):
         text_norm, glued_text_norm, audio_list = \
-            text_to_sequence(audiopath, text, self.word_to_audio, self.audio_to_sentences, self.glued_num)
+            text_to_sequence(audiopath, text, self.word_to_audio, self.audio_to_sentences, self.glued_num, self.seed)
         return torch.IntTensor(text_norm), torch.IntTensor(glued_text_norm), audio_list
 
     def __getitem__(self, index):
@@ -240,16 +242,21 @@ def get_mel(filename, hparams):
         return log_melspec_features
 
 
-def get_mel_text_pair_inference(text, hparams):
-    audiopaths_and_text = load_filepaths_and_text(hparams.training_files_base)
-    word_to_audio, audio_to_sentences = produce_inverted_index(audiopaths_and_text)
+def get_mel_text_pair_inference(hparams):
+    audiopaths_and_texts = load_filepaths_and_text(hparams.training_files_base)
+    # inference sample
+    # /Users/swl/Dissertation/LJSpeech-1.1/wavs/LJ006-0115.wav|Their original capital had been a few shillings,
+    # and for this they purchased the right to tax their fellows to the extent of pounds per week.
+    audiopath_and_text = audiopaths_and_texts[8]
+    audiopath, text = audiopath_and_text[0], audiopath_and_text[1]
+    word_to_audio, audio_to_sentences = produce_inverted_index(audiopaths_and_texts)
     # preprocess sentence
     text = text.lower()
     text = re.sub(_symbols, ' ', text)
     text = re.sub(_whitespace_re, ' ', text)
 
     text_norm, glued_text_norm, audio_list = \
-        text_to_sequence(audiopaths_and_text, text, word_to_audio, audio_to_sentences, hparams.glued_num)
+        text_to_sequence(audiopath, text, word_to_audio, audio_to_sentences, hparams.glued_num, hparams.seed)
     text_norm = torch.IntTensor(text_norm)
     glued_text_norm = torch.IntTensor(glued_text_norm)
 
