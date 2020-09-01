@@ -63,16 +63,27 @@ class TextEncoder(nn.Module):
 class Attention(nn.Module):
     def __init__(self, enc_hidden_size, dec_hidden_size):
         super(Attention, self).__init__()
-        self.model = LinearNorm(dec_hidden_size, enc_hidden_size, bias=False)
+        # self.model = LinearNorm(dec_hidden_size, enc_hidden_size, bias=False)
+
+        self.fc_1 = LinearNorm(enc_hidden_size, dec_hidden_size, bias=True)
+        self.fc_2 = LinearNorm(dec_hidden_size, dec_hidden_size, bias=True)
+        self.weight = nn.Parameter(torch.zeros(dec_hidden_size, 1))
 
     def forward(self, encoder_inputs, encoder_states, decoder_states):
+        encoder_seq_len = encoder_states.size(0)
+        decoder_states = decoder_states.expand(encoder_seq_len, -1, -1, -1).transpose(0, 1)
         # seq_len, batch, hidden_size
-        decoder_states = self.model(decoder_states).permute(1, 0, 2)
-        encoder_states = encoder_states.permute(1, 2, 0)
-        decoder_states = torch.matmul(decoder_states, encoder_states)
-        encoder_inputs = encoder_inputs.permute(1, 0, 2)
-        decoder_states = F.softmax(decoder_states, dim=2)  # batch * seq_len * 1
-        return torch.matmul(decoder_states, encoder_inputs).permute(1, 0, 2), decoder_states
+        out1 = torch.tanh(self.fc_1(encoder_states) + self.fc_2(decoder_states))
+        out2 = torch.matmul(out1, self.weight).squeeze(-1)
+        out3 = F.softmax(out2, dim=1).permute(2, 0, 1)
+        return torch.matmul(out3, encoder_inputs.permute(1, 0, 2)).permute(1, 0, 2), out3
+
+        # decoder_states = self.model(decoder_states).permute(1, 0, 2)
+        # encoder_states = encoder_states.permute(1, 2, 0)
+        # decoder_states = torch.matmul(decoder_states, encoder_states)
+        # encoder_inputs = encoder_inputs.permute(1, 0, 2)
+        # decoder_states = F.softmax(decoder_states, dim=2)  # batch * seq_len * 1
+        # return torch.matmul(decoder_states, encoder_inputs).permute(1, 0, 2), decoder_states
 
 
 class AttentionLoop(nn.Module):
@@ -80,9 +91,9 @@ class AttentionLoop(nn.Module):
         super(AttentionLoop, self).__init__()
         self.method = method
         if method == "general":
-            self.model = LinearNorm(dec_hidden_size, enc_hidden_size, bias=False)
+            self.model = LinearNorm(dec_hidden_size, enc_hidden_size, bias=True)
         elif method == "concat":
-            self.fc = LinearNorm(dec_hidden_size, enc_hidden_size, bias=False)
+            self.fc = LinearNorm(dec_hidden_size, enc_hidden_size, bias=True)
             self.weight = nn.Parameter(torch.zeros(enc_hidden_size, 1))
 
     def forward(self, encoder_states, decoder_state):
@@ -97,7 +108,7 @@ class AttentionLoop(nn.Module):
             out1 = torch.tanh(self.fc(decoder_state + encoder_states))
             out2 = torch.matmul(out1, self.weight).permute(1, 0, 2)
             out3 = F.softmax(out2, dim=1)
-            return (encoder_states.permute(1, 0, 2) * out3).sum(dim=1), out3.squeeze(dim=-1)
+            return torch.matmul(out3.permute(0, 2, 1), encoder_states.permute(1, 0, 2)).squeeze(dim=1), out3
 
 
 class AttentionDecoder(nn.Module):
