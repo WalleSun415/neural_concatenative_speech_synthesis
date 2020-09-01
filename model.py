@@ -73,10 +73,10 @@ class Attention(nn.Module):
         encoder_seq_len = encoder_states.size(0)
         decoder_states = decoder_states.expand(encoder_seq_len, -1, -1, -1).transpose(0, 1)
         # seq_len, batch, hidden_size
-        out1 = torch.tanh(self.fc_1(encoder_states) + self.fc_2(decoder_states))
-        out2 = torch.matmul(out1, self.weight).squeeze(-1)
-        out3 = F.softmax(out2, dim=1).permute(2, 0, 1)
-        return torch.matmul(out3, encoder_inputs.permute(1, 0, 2)).permute(1, 0, 2), out3
+        decoder_states = torch.tanh(self.fc_1(encoder_states) + self.fc_2(decoder_states))
+        decoder_states = torch.matmul(decoder_states, self.weight).squeeze(-1)
+        decoder_states = F.softmax(decoder_states, dim=1).permute(2, 0, 1)
+        return torch.matmul(decoder_states, encoder_inputs.permute(1, 0, 2)).permute(1, 0, 2), decoder_states
 
         # decoder_states = self.model(decoder_states).permute(1, 0, 2)
         # encoder_states = encoder_states.permute(1, 2, 0)
@@ -105,10 +105,10 @@ class AttentionLoop(nn.Module):
             decoder_state = F.softmax(decoder_state, dim=1)  # batch * seq_len * 1
             return (encoder_states * decoder_state).sum(dim=1), decoder_state
         elif self.method == "concat":
-            out1 = torch.tanh(self.fc(decoder_state + encoder_states))
-            out2 = torch.matmul(out1, self.weight).permute(1, 0, 2)
-            out3 = F.softmax(out2, dim=1)
-            return torch.matmul(out3.permute(0, 2, 1), encoder_states.permute(1, 0, 2)).squeeze(dim=1), out3
+            decoder_state = torch.tanh(self.fc(decoder_state + encoder_states))
+            decoder_state = torch.matmul(decoder_state, self.weight).permute(1, 0, 2)
+            decoder_state = F.softmax(decoder_state, dim=1)
+            return torch.matmul(decoder_state.permute(0, 2, 1), encoder_states.permute(1, 0, 2)).squeeze(dim=1), decoder_state
 
 
 class AttentionDecoder(nn.Module):
@@ -312,7 +312,7 @@ class NeuralConcatenativeSpeechSynthesis(nn.Module):
             mask = mask.permute(1, 0, 2)
 
             outputs[0].data.masked_fill_(mask, 0.0)
-            outputs[1].data.masked_fill_(mask[:, 0, :], 10)  # gate energies
+            outputs[1].data.masked_fill_(mask[:, 0, :], 1000)  # gate energies
 
         return outputs
 
@@ -332,7 +332,8 @@ class NeuralConcatenativeSpeechSynthesis(nn.Module):
                                                                             glued_audio_encoder_output,
                                                                             glued_audio_encoder_output)
         # Text to text seq2seq(Pseudo alignment 2)
-        text_padded = self.embedding(text_padded).permute(1, 0, 2)
+        text_padded = self.embedding(text_padded).permute(0, 2, 1)
+        text_padded = F.relu(self.text_prenet(text_padded)).permute(2, 0, 1)
         _, weighted_alignment, align2_attention_weights = self.target_text_decoder(text_padded,
                                                          glued_text_hidden_states,
                                                          alignment_input)
@@ -365,7 +366,8 @@ class NeuralConcatenativeSpeechSynthesis(nn.Module):
                                                                             glued_audio_encoder_output,
                                                                             glued_mel_padded)
 
-        text_padded = self.embedding(text_padded).permute(1, 0, 2)
+        text_padded = self.embedding(text_padded).permute(0, 2, 1)
+        text_padded = F.relu(self.text_prenet(text_padded)).permute(2, 0, 1)
         _, weighted_alignment, align2_attention_weights = self.target_text_decoder(text_padded,
                                                          glued_text_hidden_states,
                                                          alignment_input)
