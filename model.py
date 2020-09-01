@@ -330,7 +330,7 @@ class NeuralConcatenativeSpeechSynthesis(nn.Module):
         glued_text_padded = F.relu(self.text_prenet(glued_text_padded)).permute(2, 0, 1)
         glued_text_hidden_states, alignment_input, align1_attention_weights = self.glued_text_decoder(glued_text_padded,
                                                                             glued_audio_encoder_output,
-                                                                            glued_mel_padded)
+                                                                            glued_audio_encoder_output)
         # Text to text seq2seq(Pseudo alignment 2)
         text_padded = self.embedding(text_padded).permute(1, 0, 2)
         _, weighted_alignment, align2_attention_weights = self.target_text_decoder(text_padded,
