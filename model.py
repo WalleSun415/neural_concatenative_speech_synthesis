@@ -240,7 +240,7 @@ class RecurrentDecoder(nn.Module):
             mel_output, gate_output, attention_weight = self.decode(decoder_input)
             mel_outputs += [mel_output]
             gate_outputs += [gate_output]
-            attention_weights += [attention_weight]
+            attention_weights += [attention_weight.squeeze(-1)]
             threshold = torch.sigmoid(gate_output.data)
             # print("stop threshold: ", threshold)
             if threshold > 0.5:
